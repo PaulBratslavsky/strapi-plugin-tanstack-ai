@@ -2,7 +2,7 @@ import type { Core } from '@strapi/strapi';
 import { actionDefinitionForTool, actionForTool, PLUGIN_NAME } from './lib/tool-permissions';
 
 /** Tools whose permissions this plugin owns. Keep in step with bootstrap. */
-const TOOL_NAMES = ['list_content_types'];
+const TOOL_NAMES = ['list_content_types', 'search_content'];
 
 /**
  * Warn when an action exists but nothing has been granted it.

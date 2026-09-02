@@ -1,6 +1,7 @@
 import type { Core } from '@strapi/strapi';
 import { readConfig } from './lib/plugin-config';
 import { listContentTypes } from './tools/list-content-types';
+import { searchContent } from './tools/search-content';
 
 /**
  * Registration happens in BOOTSTRAP, not REGISTER.
@@ -28,7 +29,7 @@ const bootstrap = ({ strapi }: { strapi: Core.Strapi }) => {
   // Each tool registers independently. The official registry throws
   // synchronously on a conflict — a duplicate name against another plugin or a
   // built-in — and one bad tool must not take Strapi's boot down with it.
-  const tools = [listContentTypes];
+  const tools = [listContentTypes, searchContent];
   let registered = 0;
 
   for (const tool of tools) {
