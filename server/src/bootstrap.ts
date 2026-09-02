@@ -1,5 +1,6 @@
 import type { Core } from '@strapi/strapi';
 import { readConfig } from './lib/plugin-config';
+import { listContentTypes } from './tools/list-content-types';
 
 /**
  * Registration happens in BOOTSTRAP, not REGISTER.
@@ -24,12 +25,26 @@ const bootstrap = ({ strapi }: { strapi: Core.Strapi }) => {
     return;
   }
 
+  // Each tool registers independently. The official registry throws
+  // synchronously on a conflict — a duplicate name against another plugin or a
+  // built-in — and one bad tool must not take Strapi's boot down with it.
+  const tools = [listContentTypes];
+  let registered = 0;
+
+  for (const tool of tools) {
+    try {
+      mcp.registerTool(tool);
+      registered++;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      strapi.log.warn(`[tanstack-ai] skipped tool "${tool.name}": ${message}`);
+    }
+  }
+
   strapi.log.info(
-    `[tanstack-ai] MCP available; tool prefix "${config.mcp.toolPrefix}", ` +
+    `[tanstack-ai] registered ${registered}/${tools.length} MCP tool(s); ` +
       `chat ${config.chat.enabled ? 'ENABLED' : 'disabled'}`,
   );
-
-  // Tools are registered here in the next step.
 };
 
 export default bootstrap;
