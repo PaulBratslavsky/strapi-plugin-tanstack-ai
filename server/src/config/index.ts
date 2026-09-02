@@ -1,4 +1,96 @@
+/**
+ * Plugin configuration.
+ *
+ * Two halves, gated separately, and the split is the whole design:
+ *
+ *   mcp   — always on. Contributes cross-type tools to Strapi's official MCP
+ *           server. Pulls no AI SDK of any kind.
+ *   chat  — opt-in, OFF by default. The only thing that reaches for the
+ *           ESM-only `@tanstack/ai`, and only via a dynamic import.
+ *
+ * Why chat defaults to false: `@tanstack/ai` and `@tanstack/ai-react` are
+ * declared as OPTIONAL peer dependencies, so a host installing this plugin for
+ * the tools alone does not have to install them. Defaulting chat to true would
+ * make the plugin crash on a host that took us at our word.
+ */
+
+export interface McpConfig {
+  /**
+   * Prefix for this plugin's MCP tool names, e.g. `tsai_search_content`.
+   *
+   * Strapi's official server already publishes per-content-type tools
+   * (`list_article`, `get_article`). A prefix keeps ours distinguishable in a
+   * client's tool list and, more importantly, prevents a collision from
+   * silently shadowing a built-in.
+   */
+  toolPrefix: string;
+  /**
+   * Cap on a single tool result, in bytes.
+   *
+   * MCP clients reject an oversized result with an opaque error the model
+   * cannot act on. Guarding here means the model gets a structured message
+   * telling it to paginate instead.
+   */
+  sizeLimitBytes: number;
+}
+
+export interface ChatConfig {
+  enabled: boolean;
+  provider: 'anthropic' | 'ollama';
+  model: string;
+  /** Anthropic only. */
+  apiKey?: string;
+  /** Ollama only. */
+  baseURL?: string;
+}
+
+export interface PluginConfig {
+  mcp: McpConfig;
+  chat: ChatConfig;
+}
+
+const defaults: PluginConfig = {
+  mcp: {
+    toolPrefix: 'tsai',
+    sizeLimitBytes: 100_000,
+  },
+  chat: {
+    enabled: false,
+    provider: 'anthropic',
+    model: 'claude-sonnet-5',
+  },
+};
+
 export default {
-  default: {},
-  validator() {},
+  default: defaults,
+
+  /**
+   * Fail at BOOT, not at first use.
+   *
+   * A chat surface that is enabled but missing its credential should stop the
+   * app starting, not wait for a user to send a message and get an opaque
+   * provider error. Misconfiguration is a deployment problem, so it belongs in
+   * the deployment's feedback loop.
+   */
+  validator(config: Partial<PluginConfig>) {
+    const chat = config.chat;
+    if (chat?.enabled) {
+      if (chat.provider !== 'anthropic' && chat.provider !== 'ollama') {
+        throw new Error(
+          `[tanstack-ai] chat.provider must be 'anthropic' or 'ollama', got ${String(chat.provider)}`,
+        );
+      }
+      if (chat.provider === 'anthropic' && !chat.apiKey) {
+        throw new Error('[tanstack-ai] chat.enabled with provider "anthropic" requires chat.apiKey');
+      }
+      if (chat.provider === 'ollama' && !chat.baseURL) {
+        throw new Error('[tanstack-ai] chat.enabled with provider "ollama" requires chat.baseURL');
+      }
+    }
+
+    const mcp = config.mcp;
+    if (mcp?.sizeLimitBytes !== undefined && mcp.sizeLimitBytes <= 0) {
+      throw new Error('[tanstack-ai] mcp.sizeLimitBytes must be a positive number');
+    }
+  },
 };
