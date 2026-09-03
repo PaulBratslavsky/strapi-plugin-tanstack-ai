@@ -40,6 +40,7 @@
     "@tanstack/ai": "^0.52.0",
     "@tanstack/ai-anthropic": "^0.18.3",
     "@tanstack/ai-ollama": "^0.10.3",
+    "@tanstack/ai-react": "^0.22.4",
     "@types/react": "^18.3.31",
     "@types/react-dom": "^18.3.7",
     "prettier": "^3.9.6",
@@ -56,14 +57,14 @@
     "@strapi/sdk-plugin": "^6.1.1",
     "@strapi/strapi": "^5.52.3",
     "@tanstack/ai": "^0.52.0",
+    "@tanstack/ai-anthropic": "^0.18.0",
+    "@tanstack/ai-ollama": "^0.10.0",
     "@tanstack/ai-react": "^0.22.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-intl": "^6.8.9",
     "react-router-dom": "^6.30.6",
-    "styled-components": "^6.5.3",
-    "@tanstack/ai-anthropic": "^0.18.0",
-    "@tanstack/ai-ollama": "^0.10.0"
+    "styled-components": "^6.5.3"
   },
   "strapi": {
     "kind": "plugin",

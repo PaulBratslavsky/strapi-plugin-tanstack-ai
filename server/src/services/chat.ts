@@ -1,6 +1,7 @@
 import type { Core } from '@strapi/strapi';
 import { readConfig } from '../lib/plugin-config';
 import { loadAI, loadAdapter } from '../lib/tanstack-ai';
+import { buildChatTools, type CallerAbility } from '../lib/chat-tools';
 
 /**
  * In-admin chat, powered by TanStack AI.
@@ -34,7 +35,10 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
    * Returns the SDK's SSE `Response`; the controller is responsible for
    * getting it onto Koa, which is not the same thing (see controllers/chat.ts).
    */
-  async stream(messages: ChatMessage[], options?: { system?: string }) {
+  async stream(
+    messages: ChatMessage[],
+    options?: { system?: string; ability?: CallerAbility },
+  ) {
     const config = readConfig(strapi);
     if (!config.chat.enabled) {
       // Defence in depth. The route is not registered when chat is off, so
@@ -53,13 +57,26 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
       baseURL: config.chat.baseURL,
     });
 
+    // Filtered by the caller's own grants, so the model is offered exactly the
+    // tools this admin could have used over MCP — no more.
+    const tools = await buildChatTools(strapi, { ability: options?.ability });
+
     const trimmed = messages.slice(-MAX_TURNS);
 
     // Anthropic takes a separate top-level `system`; Ollama wants a system
     // TURN in the array and silently ignores the parameter. Getting this
     // backwards does not error — it drops the system prompt and produces a
     // fluent answer with none of the instructions applied.
-    const system = options?.system;
+    // DERIVED from the tools actually passed, never hand-written. A prompt
+    // that advertises a tool the model was not given makes it promise things
+    // it cannot do; one that omits a tool it has makes it never reach for it.
+    const toolNames = tools.map((t) => (t as { name?: string }).name).filter(Boolean);
+    const toolNote =
+      toolNames.length > 0
+        ? `\n\nTOOLS AVAILABLE: ${toolNames.join(', ')}. Use them to answer questions ` +
+          'about this Strapi instance\'s content rather than guessing.'
+        : '';
+    const system = options?.system ? `${options.system}${toolNote}` : toolNote || undefined;
     const isAnthropic = config.chat.provider === 'anthropic';
 
     // `stream: true` is explicit, not decorative: chat()'s return type is a
@@ -74,6 +91,7 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
         ? trimmed
         : [{ role: 'system', content: system }, ...trimmed]) as never,
       ...(isAnthropic && system ? { systemPrompts: [system] } : {}),
+      ...(tools.length > 0 ? { tools } : {}),
     });
 
     return toServerSentEventsResponse(stream);

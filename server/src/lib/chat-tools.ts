@@ -1,0 +1,99 @@
+import type { Core } from '@strapi/strapi';
+import { loadAI } from './tanstack-ai';
+import { actionForTool } from './tool-permissions';
+import { listContentTypes } from '../tools/list-content-types';
+import { searchContent } from '../tools/search-content';
+
+/**
+ * Offer the plugin's MCP tools to the in-admin chat.
+ *
+ * ONE DEFINITION, TWO CALLERS. These tools are written once, for Strapi's MCP
+ * server, and this adapts them for TanStack AI's `chat({ tools })`. Writing a
+ * second copy for chat would guarantee the two drift — the same tool answering
+ * differently depending on whether you asked over MCP or in the admin panel is
+ * a bug nobody would think to look for.
+ *
+ * IN-PROCESS, NOT OVER THE WIRE. The admin chat runs inside Strapi, so it
+ * calls the handlers directly rather than making an MCP round trip back to
+ * itself. MCP is how OTHER processes reach these tools; it is not a bus this
+ * process should talk to itself over.
+ */
+
+/** The tools this plugin exposes, in one place, so chat and MCP cannot diverge. */
+const ALL_TOOLS = [listContentTypes, searchContent];
+
+/** Minimal shape of the CASL ability Strapi puts on `ctx.state.userAbility`. */
+export interface CallerAbility {
+  can: (action: string) => boolean;
+}
+
+/**
+ * Build the tool set for one caller.
+ *
+ * FILTERED BY THE SAME ACTIONS THAT GATE MCP, evaluated against whoever is
+ * asking: an admin's role grants here, an admin token's grants there. A tool
+ * the caller could not reach over MCP should not become reachable just because
+ * they opened the chat panel.
+ *
+ * A caveat worth stating, from the reference's experience: only gate tools
+ * that HAVE a registered action. A tool with no action can never satisfy
+ * `can()`, so gating it withholds it from everyone — including a Super Admin —
+ * silently. Every tool here is MCP-exposed and has an action; if an
+ * admin-chat-only tool is ever added, it must either register an action or be
+ * explicitly exempt.
+ */
+export async function buildChatTools(
+  strapi: Core.Strapi,
+  options?: { ability?: CallerAbility },
+) {
+  const { toolDefinition } = await loadAI();
+  const ability = options?.ability;
+
+  const tools = [];
+
+  for (const mcpTool of ALL_TOOLS) {
+    if (ability && !ability.can(actionForTool(mcpTool.name))) {
+      strapi.log.debug(`[tanstack-ai] withholding ${mcpTool.name} — caller lacks its permission`);
+      continue;
+    }
+
+    // The MCP definition resolves its schemas through a context this caller
+    // does not have; passing an empty one is correct because neither of our
+    // tools varies its schema by caller. A tool that did would need the real
+    // handler context threading through here.
+    const emptyContext = {} as never;
+
+    const definition = toolDefinition({
+      name: mcpTool.name,
+      description: mcpTool.description,
+      inputSchema: mcpTool.resolveInputSchema(emptyContext) as never,
+      outputSchema: mcpTool.resolveOutputSchema(emptyContext) as never,
+    });
+
+    // The handler is asserted at this ONE boundary. Strapi's MCP definitions
+    // and TanStack AI's tool definitions are two independently-generic type
+    // systems describing the same runtime shape; the schemas above are already
+    // opaque to both, so the inferred return here collapses to `never`.
+    // Asserting once, here, is honest about where the bridge is — scattering
+    // casts through the body would hide it.
+    const bridge = (async (args: unknown) => {
+      const handler = mcpTool.createHandler(strapi, emptyContext);
+      const result = await handler({ args, extra: {} } as never);
+
+      // The MCP return shape carries both a rendered `content` array and
+      // `structuredContent`. A chat model wants the data, so unwrap it — and
+      // surface the protocol's error branch as a THROWN error, which is what
+      // the agent loop understands. Returning an error object as data would
+      // have the model narrate the failure as a result.
+      if ('isError' in result && result.isError) {
+        const text = result.content?.[0];
+        throw new Error(text && 'text' in text ? String(text.text) : `${mcpTool.name} failed`);
+      }
+      return (result as { structuredContent?: unknown }).structuredContent;
+    }) as never;
+
+    tools.push(definition.server(bridge));
+  }
+
+  return tools;
+}

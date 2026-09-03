@@ -2,6 +2,7 @@ import { Readable } from 'node:stream';
 import type { Core } from '@strapi/strapi';
 import type { Context } from 'koa';
 import { PLUGIN_NAME } from '../lib/tool-permissions';
+import { readConfig } from '../lib/plugin-config';
 import type { ChatMessage } from '../services/chat';
 
 /**
@@ -11,6 +12,27 @@ import type { ChatMessage } from '../services/chat';
  * handler at all means chat is on.
  */
 export default ({ strapi }: { strapi: Core.Strapi }) => ({
+  /**
+   * What the admin panel needs to decide what to render.
+   *
+   * Registered unconditionally, unlike /chat — the admin has to be able to ASK
+   * whether chat is on, and a 404 is a worse answer than `enabled: false`
+   * because it is indistinguishable from the plugin being broken.
+   *
+   * Deliberately does not return apiKey or baseURL. The panel needs to know
+   * WHETHER chat works and which model answers, not the credential.
+   */
+  async config(ctx: Context) {
+    const config = readConfig(strapi);
+    ctx.body = {
+      chat: {
+        enabled: config.chat.enabled,
+        provider: config.chat.provider,
+        model: config.chat.model,
+      },
+    };
+  },
+
   async chat(ctx: Context) {
     const body = ctx.request.body as { messages?: unknown; system?: unknown };
 
@@ -37,6 +59,9 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
         .service('chat')
         .stream(messages, {
           ...(typeof body.system === 'string' ? { system: body.system } : {}),
+          // RBAC: the model sees only the tools this admin's role grants,
+          // evaluated with the same per-tool actions that gate /mcp.
+          ...(ctx.state?.userAbility ? { ability: ctx.state.userAbility } : {}),
         });
     } catch (error) {
       // A missing optional peer, a bad credential, an unreachable Ollama. The

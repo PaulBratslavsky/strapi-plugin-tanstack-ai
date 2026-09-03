@@ -8,6 +8,16 @@
  */
 import { readConfig } from '../../lib/plugin-config';
 
+/**
+ * Always available: the panel must be able to ask whether chat is on.
+ */
+const configRoute = {
+  method: 'GET',
+  path: '/config',
+  handler: 'chat.config',
+  config: { policies: [] },
+};
+
 const chatRoutes = [
   {
     method: 'POST',
@@ -35,6 +45,6 @@ export default {
         return false;
       }
     })();
-    return enabled ? chatRoutes : [];
+    return enabled ? [configRoute, ...chatRoutes] : [configRoute];
   },
 };
