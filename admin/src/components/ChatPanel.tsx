@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useChat, fetchServerSentEvents } from '@tanstack/ai-react';
+import * as tanstackAiReact from '@tanstack/ai-react';
 import { Badge, Box, Flex, Typography } from '@strapi/design-system';
 import styled from 'styled-components';
 import { PLUGIN_ID } from '../pluginId';
@@ -7,6 +7,25 @@ import { authHeaders, backendURL } from '../utils/auth';
 import type { Message } from '../hooks/chat-messages';
 import { MessageList } from './MessageList';
 import { ChatInput } from './ChatInput';
+
+/**
+ * A NAMESPACE import, not `import { useChat } from …`, and that is load-bearing.
+ *
+ * `@tanstack/ai-react` is an OPTIONAL peer dependency, so a host that installed
+ * this plugin for the MCP tools alone does not have it. Strapi's admin build
+ * substitutes Vite's optional-peer stub for the missing package — `export
+ * default {}` in production, a module that throws in dev — and NEITHER exports
+ * anything named. A named import therefore fails at ROLLUP time with
+ * `"useChat" is not exported by __vite-optional-peer-dep:@tanstack/ai-react`,
+ * which breaks the HOST's admin build, not ours. A tools-only install could not
+ * build its admin panel at all.
+ *
+ * A namespace import binds nothing statically, so it resolves against either
+ * stub, and resolves to the real module when the package is installed. The
+ * chunk is lazy, so this file is only evaluated when someone opens the chat —
+ * which requires chat to be enabled, which requires the package to be there.
+ */
+const { useChat, fetchServerSentEvents } = tanstackAiReact;
 
 /**
  * The chat shell — layout, transport, and the three pieces below it.

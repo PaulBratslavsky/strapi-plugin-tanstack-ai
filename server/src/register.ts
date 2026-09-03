@@ -1,8 +1,15 @@
 import type { Core } from '@strapi/strapi';
 import { actionDefinitionForTool, actionForTool, PLUGIN_NAME } from './lib/tool-permissions';
+import { toolNames } from './tools';
 
-/** Tools whose permissions this plugin owns. Keep in step with bootstrap. */
-const TOOL_NAMES = ['list_content_types', 'search_content'];
+/**
+ * Derived from the registry, never hand-listed.
+ *
+ * These are the BARE names — a configured `mcp.toolPrefix` changes what MCP
+ * clients see, not what an operator granted. Keying actions to the prefixed
+ * name would orphan every existing grant the moment the prefix changed.
+ */
+const TOOL_NAMES = toolNames();
 
 /**
  * Warn when an action exists but nothing has been granted it.

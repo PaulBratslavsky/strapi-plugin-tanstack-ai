@@ -1,7 +1,6 @@
 import type { Core } from '@strapi/strapi';
 import { readConfig } from './lib/plugin-config';
-import { listContentTypes } from './tools/list-content-types';
-import { searchContent } from './tools/search-content';
+import { ALL_TOOLS, prepareTool } from './tools';
 
 /**
  * Registration happens in BOOTSTRAP, not REGISTER.
@@ -29,7 +28,9 @@ const bootstrap = ({ strapi }: { strapi: Core.Strapi }) => {
   // Each tool registers independently. The official registry throws
   // synchronously on a conflict — a duplicate name against another plugin or a
   // built-in — and one bad tool must not take Strapi's boot down with it.
-  const tools = [listContentTypes, searchContent];
+  // `prepareTool` applies the operator's `mcp` config: the name prefix and the
+  // result size limit. Both were previously documented and ignored.
+  const tools = ALL_TOOLS.map((tool) => prepareTool(tool, config.mcp));
   let registered = 0;
 
   for (const tool of tools) {

@@ -25,11 +25,16 @@ export interface McpConfig {
    */
   toolPrefix: string;
   /**
-   * Cap on a single tool result, in bytes.
+   * Budget for a single tool result, in bytes ON THE WIRE.
    *
    * MCP clients reject an oversized result with an opaque error the model
    * cannot act on. Guarding here means the model gets a structured message
    * telling it to paginate instead.
+   *
+   * "On the wire" is the load-bearing part: every tool returns its payload
+   * TWICE — once as JSON text in `content`, once as `structuredContent` — so
+   * the budget is compared against roughly double the serialised result. See
+   * `lib/size-guard.ts`.
    */
   sizeLimitBytes: number;
 }
@@ -51,8 +56,14 @@ export interface PluginConfig {
 
 const defaults: PluginConfig = {
   mcp: {
-    toolPrefix: 'tsai',
-    sizeLimitBytes: 100_000,
+    // Empty by default: neither tool collides with a Strapi built-in, and an
+    // unprefixed `search_content` is what the tool descriptions and this
+    // plugin's docs name. Set one if another plugin claims the same name.
+    toolPrefix: '',
+    // Just under the ~1 MB an MCP client will accept, counted doubled. A
+    // tighter default would refuse legitimate cross-type results: 25 types x
+    // 10 rows is easily 50 KB of JSON, which is 100 KB on the wire.
+    sizeLimitBytes: 950_000,
   },
   chat: {
     enabled: false,

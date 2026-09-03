@@ -1,5 +1,5 @@
 {
-  "version": "0.0.0",
+  "version": "0.1.0",
   "keywords": [],
   "type": "commonjs",
   "exports": {
@@ -26,11 +26,13 @@
     "build": "strapi-plugin build",
     "watch": "strapi-plugin watch",
     "watch:link": "strapi-plugin watch:link",
-    "verify": "strapi-plugin verify && npm run check:seam",
+    "verify": "strapi-plugin verify && npm run check:seam && npm run test",
     "test:ts:front": "tsc -p admin/tsconfig.json",
     "test:ts:back": "tsc -p server/tsconfig.json",
     "check:seam": "node scripts/check-seam.mjs",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",
@@ -39,6 +41,7 @@
     "@strapi/sdk-plugin": "^6.1.1",
     "@strapi/strapi": "^5.52.3",
     "@strapi/typescript-utils": "^5.52.3",
+    "@strapi/utils": "^5.52.3",
     "@tanstack/ai": "^0.52.0",
     "@tanstack/ai-anthropic": "^0.18.3",
     "@tanstack/ai-ollama": "^0.10.3",
@@ -53,24 +56,23 @@
     "react-router-dom": "^6.30.6",
     "remark-gfm": "^4.0.1",
     "styled-components": "^6.5.3",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
   },
   "peerDependencies": {
-    "@strapi/design-system": "^2.2.4",
-    "@strapi/icons": "^2.2.4",
-    "@strapi/sdk-plugin": "^6.1.1",
-    "@strapi/strapi": "^5.52.3",
+    "@strapi/design-system": "^2.0.0",
+    "@strapi/icons": "^2.0.0",
+    "@strapi/strapi": "^5.47.0",
+    "@strapi/utils": "^5.47.0",
     "@tanstack/ai": "^0.52.0",
     "@tanstack/ai-anthropic": "^0.18.0",
     "@tanstack/ai-ollama": "^0.10.0",
     "@tanstack/ai-react": "^0.22.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-intl": "^6.8.9",
-    "react-router-dom": "^6.30.6",
-    "styled-components": "^6.5.3",
-    "react-markdown": "^9.0.0",
-    "remark-gfm": "^4.0.0"
+    "react-intl": "^6.6.0",
+    "react-router-dom": "^6.30.0",
+    "styled-components": "^6.0.0"
   },
   "strapi": {
     "kind": "plugin",
@@ -94,12 +96,10 @@
     },
     "@tanstack/ai-ollama": {
       "optional": true
-    },
-    "react-markdown": {
-      "optional": true
-    },
-    "remark-gfm": {
-      "optional": true
     }
+  },
+  "dependencies": {
+    "react-markdown": "^9.0.0",
+    "remark-gfm": "^4.0.0"
   }
 }
