@@ -2,6 +2,7 @@ import type { Core } from '@strapi/strapi';
 import { readConfig } from '../lib/plugin-config';
 import { loadAI, loadAdapter } from '../lib/tanstack-ai';
 import { buildChatTools, type CallerAbility } from '../lib/chat-tools';
+import { buildMemoryTools, memoryPreamble } from '../lib/memory-tools';
 
 /**
  * In-admin chat, powered by TanStack AI.
@@ -37,7 +38,7 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
    */
   async stream(
     messages: ChatMessage[],
-    options?: { system?: string; ability?: CallerAbility },
+    options?: { system?: string; ability?: CallerAbility; adminUserId?: number },
   ) {
     const config = readConfig(strapi);
     if (!config.chat.enabled) {
@@ -61,6 +62,14 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
     // tools this admin could have used over MCP — no more.
     const tools = await buildChatTools(strapi, { ability: options?.ability });
 
+    // Memory tools only exist when we know WHOSE memories they are. They are
+    // not RBAC-filtered like the tools above: they touch only the caller's own
+    // rows, so the admin session is itself the authorisation, and gating them
+    // behind an action nobody registered would withhold them from everyone.
+    if (options?.adminUserId) {
+      tools.push(...(await buildMemoryTools(strapi, { adminUserId: options.adminUserId })));
+    }
+
     const trimmed = messages.slice(-MAX_TURNS);
 
     // Anthropic takes a separate top-level `system`; Ollama wants a system
@@ -76,7 +85,16 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
         ? `\n\nTOOLS AVAILABLE: ${toolNames.join(', ')}. Use them to answer questions ` +
           'about this Strapi instance\'s content rather than guessing.'
         : '';
-    const system = options?.system ? `${options.system}${toolNote}` : toolNote || undefined;
+    // Saved memories go in FRONT of the model every turn rather than waiting
+    // for it to call `recall_memories`. A model that has never been told it
+    // has memories has no reason to go looking for them, so a recall-only
+    // design remembers nothing in practice.
+    const memories = options?.adminUserId
+      ? await memoryPreamble(strapi, options.adminUserId)
+      : '';
+
+    const composed = `${options?.system ?? ''}${toolNote}${memories}`.trim();
+    const system = composed.length > 0 ? composed : undefined;
     const isAnthropic = config.chat.provider === 'anthropic';
 
     // `stream: true` is explicit, not decorative: chat()'s return type is a

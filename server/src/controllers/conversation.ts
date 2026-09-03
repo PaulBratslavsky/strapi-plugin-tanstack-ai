@@ -1,16 +1,15 @@
 import type { Core } from '@strapi/strapi';
 import type { Context } from 'koa';
+import { adminUserIdOf, loadOwned, unauthorized } from '../lib/admin-ownership';
 import { readStoredMessages, toStoredMessages } from '../lib/stored-messages';
 
 /**
  * Chat history, scoped to the admin user who wrote it.
  *
- * Ported from the reference plugin's `controllers/conversation.ts`. The shape
- * that matters is the ownership check, repeated on every operation that names
- * a row: load it, compare `adminUserId`, and answer 404 — NOT 403 — when it
- * belongs to someone else. 403 would confirm the row exists, which is a
- * disclosure in itself; 404 says only that this user has no such conversation,
- * which is true.
+ * Ported from the reference plugin's `controllers/conversation.ts`. The check
+ * that matters — load the row, compare `adminUserId`, answer 404 rather than
+ * 403 — lives in `lib/admin-ownership` so the per-user controllers share one
+ * copy of it.
  *
  * `find` returns titles and timestamps WITHOUT messages, because the sidebar
  * only needs those and a list that carried every transcript would grow
@@ -18,22 +17,7 @@ import { readStoredMessages, toStoredMessages } from '../lib/stored-messages';
  */
 
 const CONTENT_TYPE = 'plugin::tanstack-ai.conversation' as const;
-
-/** The calling admin, or null if the session carries none. */
-function adminUserIdOf(ctx: Context): number | null {
-  const id = ctx.state?.user?.id;
-  return typeof id === 'number' ? id : null;
-}
-
-function unauthorized(ctx: Context): void {
-  ctx.status = 401;
-  ctx.body = { error: 'Unauthorized' };
-}
-
-function notFound(ctx: Context): void {
-  ctx.status = 404;
-  ctx.body = { error: 'Conversation not found' };
-}
+const LABEL = 'Conversation';
 
 const conversationController = ({ strapi }: { strapi: Core.Strapi }) => ({
   async find(ctx: Context) {
@@ -50,14 +34,13 @@ const conversationController = ({ strapi }: { strapi: Core.Strapi }) => ({
   },
 
   async findOne(ctx: Context) {
-    const adminUserId = adminUserIdOf(ctx);
-    if (!adminUserId) return unauthorized(ctx);
-
-    const conversation = await strapi
-      .documents(CONTENT_TYPE)
-      .findOne({ documentId: ctx.params.id });
-
-    if (!conversation || conversation.adminUserId !== adminUserId) return notFound(ctx);
+    const conversation = await loadOwned<{ adminUserId: number; messages: unknown }>(
+      strapi,
+      ctx,
+      CONTENT_TYPE,
+      LABEL,
+    );
+    if (!conversation) return;
 
     const { messages, error } = readStoredMessages(conversation.messages);
     if (error) {
@@ -95,13 +78,7 @@ const conversationController = ({ strapi }: { strapi: Core.Strapi }) => ({
   },
 
   async update(ctx: Context) {
-    const adminUserId = adminUserIdOf(ctx);
-    if (!adminUserId) return unauthorized(ctx);
-
-    const existing = await strapi
-      .documents(CONTENT_TYPE)
-      .findOne({ documentId: ctx.params.id });
-    if (!existing || existing.adminUserId !== adminUserId) return notFound(ctx);
+    if (!(await loadOwned(strapi, ctx, CONTENT_TYPE, LABEL))) return;
 
     const { title, messages } = ctx.request.body as { title?: string; messages?: unknown };
     const data: Record<string, unknown> = {};
@@ -126,13 +103,7 @@ const conversationController = ({ strapi }: { strapi: Core.Strapi }) => ({
   },
 
   async delete(ctx: Context) {
-    const adminUserId = adminUserIdOf(ctx);
-    if (!adminUserId) return unauthorized(ctx);
-
-    const existing = await strapi
-      .documents(CONTENT_TYPE)
-      .findOne({ documentId: ctx.params.id });
-    if (!existing || existing.adminUserId !== adminUserId) return notFound(ctx);
+    if (!(await loadOwned(strapi, ctx, CONTENT_TYPE, LABEL))) return;
 
     await strapi.documents(CONTENT_TYPE).delete({ documentId: ctx.params.id });
 

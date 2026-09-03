@@ -58,6 +58,13 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
           // RBAC: the model sees only the tools this admin's role grants,
           // evaluated with the same per-tool actions that gate /mcp.
           ...(ctx.state?.userAbility ? { ability: ctx.state.userAbility } : {}),
+          // Identity, which is a different question from permission: it is
+          // what makes memories belong to somebody. Without it the memory
+          // tools are not offered at all, rather than writing rows with no
+          // owner.
+          ...(typeof ctx.state?.user?.id === 'number'
+            ? { adminUserId: ctx.state.user.id }
+            : {}),
         });
     } catch (error) {
       // A missing optional peer, a bad credential, an unreachable Ollama. The

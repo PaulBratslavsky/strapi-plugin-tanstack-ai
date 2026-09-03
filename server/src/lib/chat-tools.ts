@@ -1,8 +1,7 @@
 import type { Core } from '@strapi/strapi';
 import { loadAI } from './tanstack-ai';
 import { actionForTool } from './tool-permissions';
-import { listContentTypes } from '../tools/list-content-types';
-import { searchContent } from '../tools/search-content';
+import { ALL_TOOLS } from '../tools';
 
 /**
  * Offer the plugin's MCP tools to the in-admin chat.
@@ -19,8 +18,16 @@ import { searchContent } from '../tools/search-content';
  * process should talk to itself over.
  */
 
-/** The tools this plugin exposes, in one place, so chat and MCP cannot diverge. */
-const ALL_TOOLS = [listContentTypes, searchContent];
+/*
+ * `ALL_TOOLS` comes from the registry in `../tools`, which is also what
+ * bootstrap registers with MCP and what register derives permission actions
+ * from. It used to be a third hand-maintained copy of the same list living
+ * here — the drift that arrangement invites is a tool the chat can call and
+ * MCP cannot, or vice versa, with nothing to notice it.
+ *
+ * The BARE definitions, deliberately: a configured `mcp.toolPrefix` renames
+ * tools for MCP clients, and the in-admin chat is not one.
+ */
 
 /** Minimal shape of the CASL ability Strapi puts on `ctx.state.userAbility`. */
 export interface CallerAbility {

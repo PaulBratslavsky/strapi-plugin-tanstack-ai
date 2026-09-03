@@ -6,7 +6,9 @@ import { PLUGIN_ID } from '../pluginId';
 import { authHeaders, backendURL } from '../utils/auth';
 import type { Message } from '../hooks/chat-messages';
 import { useConversations } from '../hooks/useConversations';
+import { useMemories } from '../hooks/useMemories';
 import { ConversationSidebar } from './ConversationSidebar';
+import { MemoryPanel } from './MemoryPanel';
 import { MessageList } from './MessageList';
 import { ChatInput } from './ChatInput';
 
@@ -99,6 +101,7 @@ const TopBarButton = styled.button`
 export function ChatPanel() {
   const [input, setInput] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [memoryPanelOpen, setMemoryPanelOpen] = useState(false);
   // Reported by the stream itself rather than fetched separately: the answer
   // knows which model produced it, so there is no second source to fall out of
   // step with the first.
@@ -118,6 +121,14 @@ export function ChatPanel() {
     saveMessages,
     removeConversation,
   } = useConversations();
+
+  const {
+    memories,
+    error: memoryError,
+    addMemory,
+    removeMemory,
+    refresh: refreshMemories,
+  } = useMemories();
 
   const { messages, setMessages, sendMessage, isLoading, error, stop, clear } = useChat({
     connection: fetchServerSentEvents(`${backendURL()}/${PLUGIN_ID}/chat`, () => ({
@@ -149,12 +160,18 @@ export function ChatPanel() {
   }, [activeId, initialMessages, setMessages]);
 
   // Save when a turn finishes: isLoading true -> false.
+  //
+  // Memories are refreshed on the same edge, because the MODEL writes them
+  // mid-turn via `save_memory`. Nothing on the client can know a new one
+  // exists until it asks, so without this the panel only catches up on a
+  // reload — and a user watching it would conclude the tool had not run.
   useEffect(() => {
     if (wasLoadingRef.current && !isLoading && messages.length > 0) {
       void saveMessages(messages as unknown as Message[]);
+      void refreshMemories();
     }
     wasLoadingRef.current = isLoading;
-  }, [isLoading, messages, saveMessages]);
+  }, [isLoading, messages, saveMessages, refreshMemories]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
@@ -197,6 +214,13 @@ export function ChatPanel() {
             </Typography>
           )}
           <div style={{ flex: 1 }} />
+          <TopBarButton
+            type="button"
+            onClick={() => setMemoryPanelOpen((open) => !open)}
+            aria-expanded={memoryPanelOpen}
+          >
+            Memories ({memories.length})
+          </TopBarButton>
           {/*
           "New chat" rather than "Clear": the transcript is persisted now, so
           emptying the panel starts a new conversation instead of destroying
@@ -240,6 +264,12 @@ export function ChatPanel() {
           onStop={() => stop()}
         />
       </ChatColumn>
+      <MemoryPanel
+        memories={memories}
+        open={memoryPanelOpen}
+        onAdd={addMemory}
+        onDelete={removeMemory}
+      />
     </ChatLayout>
   );
 }

@@ -220,4 +220,64 @@ test.describe('TanStack AI admin panel', () => {
     await page.getByRole('button', { name: /history/i }).click();
     await expect(page.getByText(/no conversations yet/i)).toHaveCount(0);
   });
+
+  test('a memory saved by hand reaches the next conversation', async ({ page }) => {
+    // Memory is only worth anything if it crosses conversations, so the check
+    // is: save a fact, start a NEW conversation, and ask about it. The panel
+    // never sends the fact — if the answer contains it, it came from the
+    // system prompt the server built.
+    test.setTimeout(300_000);
+    await openPanel(page);
+    await expect(composerOf(page)).toBeVisible({ timeout: 30_000 });
+
+    const secret = `orbital-${Date.now().toString().slice(-6)}`;
+
+    await page.getByRole('button', { name: /^memories/i }).click();
+    const memoryInput = page.getByRole('textbox', { name: /new memory/i });
+    await memoryInput.fill(`The user's project codename is ${secret}`);
+    await memoryInput.press('Enter');
+    await expect(page.locator('[data-memory]').filter({ hasText: secret })).toHaveCount(1);
+
+    // A brand-new conversation: nothing in the transcript mentions the
+    // codename, so the model can only know it from the injected memories.
+    const newChat = page.getByRole('button', { name: /^new chat$/i });
+    if (await newChat.isEnabled()) await newChat.click();
+
+    await composerOf(page).fill('What is my project codename? Answer with just the codename.');
+    await page.getByRole('button', { name: /^send$/i }).click();
+    await expect(page.getByRole('button', { name: /^send$/i })).toBeVisible({
+      timeout: 280_000,
+    });
+
+    const answer = page.locator('[data-message-role="assistant"]').last();
+    await expect(answer).toContainText(secret, { timeout: 30_000 });
+  });
+
+  test('memories survive a reload and can be deleted', async ({ page }) => {
+    await openPanel(page);
+    await expect(composerOf(page)).toBeVisible({ timeout: 30_000 });
+    await page.getByRole('button', { name: /^memories/i }).click();
+
+    const fact = `likes-tabs-${Date.now().toString().slice(-6)}`;
+    const memoryInput = page.getByRole('textbox', { name: /new memory/i });
+    await memoryInput.fill(fact);
+    await memoryInput.press('Enter');
+
+    await page.reload();
+    await expect(composerOf(page)).toBeVisible({ timeout: 30_000 });
+    await page.getByRole('button', { name: /^memories/i }).click();
+
+    const row = page.locator('[data-memory]').filter({ hasText: fact });
+    await expect(row).toHaveCount(1, { timeout: 30_000 });
+
+    await row.getByRole('button', { name: /^Delete memory/ }).click();
+    await expect(row).toHaveCount(0);
+
+    // Gone on the server too, not just out of the list in this tab.
+    await page.reload();
+    await page.getByRole('button', { name: /^memories/i }).click();
+    await expect(page.locator('[data-memory]').filter({ hasText: fact })).toHaveCount(0, {
+      timeout: 30_000,
+    });
+  });
 });

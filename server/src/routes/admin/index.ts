@@ -49,6 +49,14 @@ const chatRoutes = [
   { method: 'POST', path: '/conversations', handler: 'conversation.create', config: { policies: [] } },
   { method: 'PUT', path: '/conversations/:id', handler: 'conversation.update', config: { policies: [] } },
   { method: 'DELETE', path: '/conversations/:id', handler: 'conversation.delete', config: { policies: [] } },
+
+  // Memories. Same scoping story as conversations: every handler keys off the
+  // admin session, and rows addressed by id are re-checked against their
+  // owner. There is no route to another user's memories to forget to protect.
+  { method: 'GET', path: '/memories', handler: 'memory.find', config: { policies: [] } },
+  { method: 'POST', path: '/memories', handler: 'memory.create', config: { policies: [] } },
+  { method: 'PUT', path: '/memories/:id', handler: 'memory.update', config: { policies: [] } },
+  { method: 'DELETE', path: '/memories/:id', handler: 'memory.delete', config: { policies: [] } },
 ];
 
 export default {
