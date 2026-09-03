@@ -30,7 +30,25 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
   },
 
   async chat(ctx: Context) {
-    const body = ctx.request.body as { messages?: unknown; system?: unknown };
+    const body = ctx.request.body as {
+      messages?: unknown;
+      system?: unknown;
+      enabledToolSources?: unknown;
+      forwardedProps?: { enabledToolSources?: unknown };
+    };
+
+    /**
+     * The panel's tool-source selection.
+     *
+     * Read from `forwardedProps` FIRST, because that is where the SDK puts
+     * caller-supplied fields — a top-level key would have been dropped
+     * silently, and the symptom is a picker whose toggles do nothing. The
+     * top-level fallback keeps a plain HTTP client (curl, a test) able to send
+     * it without knowing the SDK's envelope.
+     */
+    const requestedSources = Array.isArray(body.forwardedProps?.enabledToolSources)
+      ? body.forwardedProps.enabledToolSources
+      : body.enabledToolSources;
 
     // Validate before touching the model: a bad request should cost nothing
     // and say what was wrong, not fail somewhere inside a provider call.
@@ -64,6 +82,11 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
           // owner.
           ...(typeof ctx.state?.user?.id === 'number'
             ? { adminUserId: ctx.state.user.id }
+            : {}),
+          // Absent means "not stated" and offers all of them; an empty array
+          // means the user turned them all off, which is a different thing.
+          ...(Array.isArray(requestedSources)
+            ? { enabledToolSources: requestedSources.filter((s) => typeof s === 'string') }
             : {}),
         });
     } catch (error) {

@@ -58,6 +58,9 @@ const chatRoutes = [
   { method: 'PUT', path: '/memories/:id', handler: 'memory.update', config: { policies: [] } },
   { method: 'DELETE', path: '/memories/:id', handler: 'memory.delete', config: { policies: [] } },
 
+  // What tools the chat can reach, and where each comes from. Read-only.
+  { method: 'GET', path: '/tool-sources', handler: 'tool-sources.find', config: { policies: [] } },
+
   // Research notes. Same per-user scoping again.
   { method: 'GET', path: '/notes', handler: 'note.find', config: { policies: [] } },
   { method: 'POST', path: '/notes', handler: 'note.create', config: { policies: [] } },

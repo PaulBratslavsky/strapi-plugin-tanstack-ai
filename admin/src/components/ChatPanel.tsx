@@ -8,9 +8,11 @@ import type { Message } from '../hooks/chat-messages';
 import { useConversations } from '../hooks/useConversations';
 import { useMemories } from '../hooks/useMemories';
 import { useNotes } from '../hooks/useNotes';
+import { useToolSources } from '../hooks/useToolSources';
 import { ConversationSidebar } from './ConversationSidebar';
 import { MemoryPanel } from './MemoryPanel';
 import { NotePanel } from './NotePanel';
+import { ToolSourcePicker } from './ToolSourcePicker';
 import { MessageList } from './MessageList';
 import { ChatInput } from './ChatInput';
 
@@ -151,7 +153,20 @@ export function ChatPanel() {
 
   const { notes, error: noteError, editNote, removeNote, refresh: refreshNotes } = useNotes();
 
+  const {
+    sources,
+    enabled: enabledSources,
+    enabledToolSources,
+    toggle: toggleSource,
+    error: sourceError,
+  } = useToolSources();
+
   const { messages, setMessages, sendMessage, isLoading, error, stop, clear } = useChat({
+    // Sent with every request so the server can filter contributed tools to
+    // the sources this admin has switched on. Undefined until the sources have
+    // loaded — which the server reads as "not stated" and answers with all of
+    // them, rather than as "none".
+    ...(enabledToolSources ? { forwardedProps: { enabledToolSources } } : {}),
     connection: fetchServerSentEvents(`${backendURL()}/${PLUGIN_ID}/chat`, () => ({
       // Resolved per request, not captured once: a token refreshed mid-session
       // would otherwise leave this panel authenticating with a stale one.
@@ -231,6 +246,7 @@ export function ChatPanel() {
           {model ? (
             <Badge>{model}</Badge>
           ) : null}
+          <ToolSourcePicker sources={sources} enabled={enabledSources} onToggle={toggleSource} />
           <TopBarHint>
             {!model && (
               <Typography variant="pi" textColor="neutral600">
@@ -277,12 +293,12 @@ export function ChatPanel() {
           isLoading={isLoading}
         />
 
-        {(error || historyError || memoryError || noteError) && (
+        {(error || historyError || memoryError || noteError || sourceError) && (
           <Box padding={3} background="danger100" marginLeft={4} marginRight={4}>
             <Typography textColor="danger600">
               {error
                 ? `Error: ${error instanceof Error ? error.message : String(error)}`
-                : (historyError ?? memoryError ?? noteError)}
+                : (historyError ?? memoryError ?? noteError ?? sourceError)}
             </Typography>
           </Box>
         )}

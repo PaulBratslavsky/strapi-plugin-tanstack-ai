@@ -434,4 +434,53 @@ test.describe('TanStack AI admin panel', () => {
       timeout: 30_000,
     });
   });
+
+  test('the tool picker lists every source, and a toggle reaches the server', async ({ page }) => {
+    // The picker is the answer to "what can this thing actually do, and where
+    // did each tool come from" — so the test checks that a THIRD-PARTY
+    // plugin's tools are listed under their own source, and that switching it
+    // off is actually sent with the next request rather than only looking
+    // switched off.
+    await openPanel(page);
+    await expect(composerOf(page)).toBeVisible({ timeout: 30_000 });
+
+    await page.getByRole('button', { name: /^tools \(/i }).click();
+    const menu = page.getByRole('dialog', { name: /tool sources/i });
+    await expect(menu).toBeVisible();
+
+    // This plugin's own tools, always on and not switchable.
+    await expect(menu.getByText('list_content_types')).toBeVisible();
+    const builtIn = menu.getByRole('checkbox', { name: /enable strapi content/i });
+    await expect(builtIn).toBeChecked();
+    await expect(builtIn).toBeDisabled();
+
+    // A plugin installed from npm, contributing through its `ai-tools`
+    // service, with its tools namespaced by source.
+    await expect(menu.getByText('youtube-transcripts__listTranscripts')).toBeVisible();
+    const youtube = menu.getByRole('checkbox', { name: /enable youtube transcripts/i });
+    await expect(youtube).toBeEnabled();
+
+    // Turning it off must travel: capture what the panel actually sends.
+    await youtube.uncheck();
+    await page.keyboard.press('Escape');
+
+    const sent = page.waitForRequest(
+      (request) => request.url().endsWith('/tanstack-ai/chat') && request.method() === 'POST',
+    );
+    await composerOf(page).fill('hello');
+    await page.getByRole('button', { name: /^send$/i }).click();
+    const body = JSON.parse((await sent).postData() ?? '{}');
+    expect(body.forwardedProps?.enabledToolSources).not.toContain('youtube-transcripts');
+
+    await page.getByRole('button', { name: /^stop$/i }).click().catch(() => undefined);
+
+    // And the choice is remembered across a reload — it is a per-person
+    // preference, kept in localStorage rather than on the server.
+    await page.reload();
+    await expect(composerOf(page)).toBeVisible({ timeout: 30_000 });
+    await page.getByRole('button', { name: /^tools \(/i }).click();
+    await expect(
+      page.getByRole('checkbox', { name: /enable youtube transcripts/i }),
+    ).not.toBeChecked();
+  });
 });

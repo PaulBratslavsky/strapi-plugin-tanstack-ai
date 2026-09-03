@@ -193,6 +193,44 @@ verified with curl and passed while the panel was broken, because the admin was
 fetching a different plugin id than the server served. Only the built bundle
 knows which id it compiled in.
 
+## Tools from other plugins
+
+Another Strapi plugin can contribute tools to this chat without either plugin
+knowing about the other. It exposes a service named `ai-tools`:
+
+```ts
+// server/src/services/ai-tools.ts, in the contributing plugin
+export default () => ({
+  getTools: () => [
+    {
+      name: 'listTranscripts',
+      description: 'List saved YouTube transcripts.',
+      schema: z.object({ page: z.number().optional() }),
+      execute: async (args, strapi) => { /* … */ },
+    },
+  ],
+  getMeta: () => ({
+    label: 'YouTube Transcripts',
+    description: 'Fetch, search, list and read YouTube transcripts',
+  }),
+});
+```
+
+That is it — no registration call. This plugin walks `strapi.plugins` on each
+chat request, and namespaces what it finds as `<plugin>__<tool>`, so a second
+plugin's `search` cannot shadow the first's.
+
+The contract is the reference plugin's, deliberately: a plugin written for
+`strapi-plugin-ai-sdk` works here unchanged. Verified with
+[`strapi-plugin-youtube-transcripts`](https://www.npmjs.com/package/strapi-plugin-youtube-transcripts)
+installed from npm and not modified.
+
+The **Tools** menu in the panel lists every tool the model has and which plugin
+each came from. Contributed sources can be switched off there; the plugin's own
+content tools and the memory/notes tools cannot, since a chat without them
+cannot answer the questions it exists for. The selection is a per-person
+browser preference, sent with each request as `forwardedProps.enabledToolSources`.
+
 ## Verifying a clean install
 
 The claim above is a packaging claim, so it is checked against a real, empty

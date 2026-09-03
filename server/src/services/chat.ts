@@ -4,6 +4,7 @@ import { loadAI, loadAdapter } from '../lib/tanstack-ai';
 import { buildChatTools, type CallerAbility } from '../lib/chat-tools';
 import { buildMemoryTools, memoryPreamble } from '../lib/memory-tools';
 import { buildNoteTools } from '../lib/note-tools';
+import { buildContributedTools } from '../lib/contributed-tools';
 
 /**
  * In-admin chat, powered by TanStack AI.
@@ -39,7 +40,12 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
    */
   async stream(
     messages: ChatMessage[],
-    options?: { system?: string; ability?: CallerAbility; adminUserId?: number },
+    options?: {
+      system?: string;
+      ability?: CallerAbility;
+      adminUserId?: number;
+      enabledToolSources?: string[];
+    },
   ) {
     const config = readConfig(strapi);
     if (!config.chat.enabled) {
@@ -74,6 +80,16 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
       // window on material this question probably has nothing to do with.
       tools.push(...(await buildNoteTools(strapi, { adminUserId: options.adminUserId })));
     }
+
+    // Tools other installed plugins contribute through an `ai-tools` service.
+    // Discovered per request rather than cached at boot: a plugin can be
+    // enabled or disabled without restarting this one, and the cost is a walk
+    // over `strapi.plugins`.
+    tools.push(
+      ...(await buildContributedTools(strapi, {
+        ...(options?.enabledToolSources ? { enabledSources: options.enabledToolSources } : {}),
+      })),
+    );
 
     const trimmed = messages.slice(-MAX_TURNS);
 
