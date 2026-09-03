@@ -1,54 +1,99 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useChat, fetchServerSentEvents } from '@tanstack/ai-react';
-import { Box, Button, Flex, TextInput, Typography, Loader } from '@strapi/design-system';
+import { Badge, Box, Flex, Typography } from '@strapi/design-system';
+import styled from 'styled-components';
 import { PLUGIN_ID } from '../pluginId';
+import { authHeaders, backendURL } from '../utils/auth';
+import type { Message } from '../hooks/chat-messages';
+import { MessageList } from './MessageList';
+import { ChatInput } from './ChatInput';
 
 /**
- * The in-admin chat.
+ * The chat shell — layout, transport, and the three pieces below it.
+ *
+ * Ported from the reference plugin's `Chat.tsx`, minus the surfaces this plugin
+ * does not have (conversation sidebar, memories, notes, tool-source picker).
+ * What carries over is the structure: this component owns the SDK state and
+ * nothing else, `MessageList` renders the transcript, `ChatInput` composes.
  *
  * THIS MODULE IS LAZY-LOADED, and that is the client half of the plugin's ESM
- * seam. `@tanstack/ai-react` is an optional peer dependency, so an install
- * with chat off must never evaluate this file — importing it eagerly from the
- * page would pull the SDK into the admin bundle for everyone, including hosts
- * that were told they did not need it. The page imports it through
- * React.lazy(), behind the config check.
+ * seam. `@tanstack/ai-react`, react-markdown and remark-gfm are all optional
+ * peers, so an install with chat off must never evaluate this file — the page
+ * reaches it through React.lazy(), and the menu link that leads there is only
+ * registered when the server says chat is on.
  */
 
-type Msg = { id?: string; role: string; parts?: Array<{ type: string; content?: string }> };
+const ChatLayout = styled.div`
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 320px);
+  min-height: 400px;
+  border-radius: 4px;
+  overflow: hidden;
+  box-shadow: ${({ theme }) => theme.shadows.tableShadow};
+  background: ${({ theme }) => theme.colors.neutral0};
+`;
 
-/** The visible prose of a message. `parts` is ordered and mixed. */
-function textOf(m: Msg): string {
-  return (m.parts ?? [])
-    .filter((p) => p.type === 'text')
-    .map((p) => p.content ?? '')
-    .join('');
-}
+const ChatTopBar = styled.div`
+  display: flex;
+  align-items: center;
+  padding: 8px 16px;
+  border-bottom: 1px solid ${({ theme }) => theme.colors.neutral200};
+  gap: 8px;
+`;
 
-/** Tool calls, so the panel can show that the model reached for the content. */
-function toolsOf(m: Msg): string[] {
-  return (m.parts ?? [])
-    .filter((p) => p.type === 'tool-call')
-    .map((p) => (p as { name?: string }).name ?? 'tool');
-}
+const TopBarButton = styled.button`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid ${({ theme }) => theme.colors.neutral200};
+  border-radius: 4px;
+  background: ${({ theme }) => theme.colors.neutral0};
+  color: ${({ theme }) => theme.colors.neutral600};
+  font-size: 12px;
+  cursor: pointer;
+  flex-shrink: 0;
 
-export function ChatPanel({ model }: Readonly<{ model: string }>) {
+  &:hover:not(:disabled) {
+    background: ${({ theme }) => theme.colors.neutral100};
+    color: ${({ theme }) => theme.colors.primary600};
+    border-color: ${({ theme }) => theme.colors.primary600};
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+`;
+
+export function ChatPanel() {
   const [input, setInput] = useState('');
+  // Reported by the stream itself rather than fetched separately: the answer
+  // knows which model produced it, so there is no second source to fall out of
+  // step with the first.
+  const [model, setModel] = useState<string | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const { messages, sendMessage, isLoading, error } = useChat({
-    // Strapi's admin fetch client is not reachable from here, so the session
-    // JWT is read the way the admin stores it. Without the header this posts
-    // as anonymous and the route rejects it — which looks like the chat being
-    // broken rather than unauthenticated.
-    connection: fetchServerSentEvents(`/${PLUGIN_ID}/chat`, () => ({
-      headers: {
-        Authorization: `Bearer ${
-          JSON.parse(sessionStorage.getItem('jwtToken') ?? localStorage.getItem('jwtToken') ?? '""')
-        }`,
-      },
+  const { messages, sendMessage, isLoading, error, stop, clear } = useChat({
+    connection: fetchServerSentEvents(`${backendURL()}/${PLUGIN_ID}/chat`, () => ({
+      // Resolved per request, not captured once: a token refreshed mid-session
+      // would otherwise leave this panel authenticating with a stale one.
+      headers: authHeaders(),
     })),
+    onFinish: (message) => {
+      const reported = (message as { metadata?: { tanstack?: { model?: string } } }).metadata
+        ?.tanstack?.model;
+      if (reported) setModel(reported);
+    },
   });
 
-  const send = () => {
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [messages]);
+
+  const handleSend = () => {
     const text = input.trim();
     if (!text || isLoading) return;
     setInput('');
@@ -56,73 +101,47 @@ export function ChatPanel({ model }: Readonly<{ model: string }>) {
   };
 
   return (
-    <Flex direction="column" alignItems="stretch" gap={4}>
-      <Typography variant="pi" textColor="neutral600">
-        Answering with <b>{model}</b>. The model can read this instance's content types and
-        search across them.
-      </Typography>
-
-      <Box
-        background="neutral0"
-        padding={4}
-        hasRadius
-        borderColor="neutral200"
-        style={{ minHeight: 240, maxHeight: 480, overflowY: 'auto' }}
-      >
-        {messages.length === 0 && (
-          <Typography textColor="neutral500">
-            Ask something about your content — try “what content types exist?” or “search
-            everything for Strapi”.
+    <ChatLayout>
+      <ChatTopBar>
+        {model ? (
+          <Badge>{model}</Badge>
+        ) : (
+          <Typography variant="pi" textColor="neutral600">
+            Ask about your content types or search across all of them.
           </Typography>
         )}
+        <div style={{ flex: 1 }} />
+        <TopBarButton
+          type="button"
+          onClick={() => clear()}
+          disabled={messages.length === 0 || isLoading}
+        >
+          Clear
+        </TopBarButton>
+      </ChatTopBar>
 
-        <Flex direction="column" alignItems="stretch" gap={3}>
-          {messages.map((m, i) => {
-            const tools = toolsOf(m as Msg);
-            return (
-              <Box key={(m as Msg).id ?? i}>
-                <Typography variant="sigma" textColor="neutral600">
-                  {m.role === 'user' ? 'You' : 'Assistant'}
-                </Typography>
-                {tools.length > 0 && (
-                  <Box paddingTop={1} paddingBottom={1}>
-                    <Typography variant="pi" textColor="primary600">
-                      called {tools.join(', ')}
-                    </Typography>
-                  </Box>
-                )}
-                <Typography style={{ whiteSpace: 'pre-wrap' }}>{textOf(m as Msg)}</Typography>
-              </Box>
-            );
-          })}
-          {isLoading && <Loader small>Thinking…</Loader>}
-        </Flex>
-      </Box>
+      <MessageList
+        ref={messagesEndRef}
+        messages={messages as unknown as Message[]}
+        isLoading={isLoading}
+      />
 
       {error && (
-        <Typography textColor="danger600">
-          {error instanceof Error ? error.message : String(error)}
-        </Typography>
+        <Box padding={3} background="danger100" marginLeft={4} marginRight={4}>
+          <Typography textColor="danger600">
+            Error: {error instanceof Error ? error.message : String(error)}
+          </Typography>
+        </Box>
       )}
 
-      <Flex gap={2}>
-        <Box grow={1}>
-          <TextInput
-            aria-label="Message"
-            placeholder="Ask about your content…"
-            value={input}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInput(e.target.value)}
-            onKeyDown={(e: React.KeyboardEvent) => {
-              if (e.key === 'Enter') send();
-            }}
-            disabled={isLoading}
-          />
-        </Box>
-        <Button onClick={send} disabled={isLoading || input.trim().length === 0}>
-          Send
-        </Button>
-      </Flex>
-    </Flex>
+      <ChatInput
+        input={input}
+        isLoading={isLoading}
+        onInputChange={setInput}
+        onSend={handleSend}
+        onStop={() => stop()}
+      />
+    </ChatLayout>
   );
 }
 

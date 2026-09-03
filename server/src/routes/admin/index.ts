@@ -15,7 +15,13 @@ const configRoute = {
   method: 'GET',
   path: '/config',
   handler: 'chat.config',
-  config: { policies: [] },
+  config: {
+    policies: [],
+    // No session required. The admin asks this during register(), before
+    // login, to decide whether to show the menu link at all. It returns a
+    // single boolean that the menu's own presence would reveal anyway.
+    auth: false,
+  },
 };
 
 const chatRoutes = [

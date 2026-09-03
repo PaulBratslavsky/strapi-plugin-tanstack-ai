@@ -13,24 +13,20 @@ import type { ChatMessage } from '../services/chat';
  */
 export default ({ strapi }: { strapi: Core.Strapi }) => ({
   /**
-   * What the admin panel needs to decide what to render.
+   * Whether chat is on. Nothing else.
    *
-   * Registered unconditionally, unlike /chat — the admin has to be able to ASK
-   * whether chat is on, and a 404 is a worse answer than `enabled: false`
-   * because it is indistinguishable from the plugin being broken.
+   * UNAUTHENTICATED, deliberately, and that is the reason it returns one
+   * boolean. The admin decides whether to render the menu link during
+   * `register()`, which runs before anyone has logged in — so an authenticated
+   * endpoint cannot answer the question at the moment it is asked.
    *
-   * Deliberately does not return apiKey or baseURL. The panel needs to know
-   * WHETHER chat works and which model answers, not the credential.
+   * What it discloses is a boolean that is already visible as the presence or
+   * absence of a menu item. Provider, model and credential are NOT here: those
+   * are worth a session, and the panel learns the model from the stream's own
+   * metadata once a turn runs.
    */
   async config(ctx: Context) {
-    const config = readConfig(strapi);
-    ctx.body = {
-      chat: {
-        enabled: config.chat.enabled,
-        provider: config.chat.provider,
-        model: config.chat.model,
-      },
-    };
+    ctx.body = { chat: { enabled: readConfig(strapi).chat.enabled } };
   },
 
   async chat(ctx: Context) {

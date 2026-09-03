@@ -136,3 +136,5 @@ yarn-error.log
 ############################
 
 coverage
+e2e/.auth/
+test-results/
