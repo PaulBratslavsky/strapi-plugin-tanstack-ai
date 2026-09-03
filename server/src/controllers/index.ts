@@ -1,5 +1,7 @@
-import controller from "./controller";
+import controller from './controller';
+import chat from './chat';
 
 export default {
   controller,
+  chat,
 };

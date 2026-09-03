@@ -18,6 +18,14 @@
  * called, the SDK is not loaded — which is a property you can check.
  */
 
+/**
+ * Type-only import. Erased at compile time, so it does NOT put the SDK in the
+ * module graph — the built bundle is greppable proof. It buys real inference:
+ * `chat()` returns a union unless its adapter type is known, and an untyped
+ * adapter silently selects the non-streaming overload.
+ */
+import type { AnyTextAdapter } from '@tanstack/ai';
+
 /** Cached so repeated chat turns do not re-resolve the module graph. */
 let cached: typeof import('@tanstack/ai') | null = null;
 
@@ -39,6 +47,58 @@ export async function loadAI(): Promise<typeof import('@tanstack/ai')> {
       '[tanstack-ai] chat is enabled but @tanstack/ai could not be loaded. ' +
         'It is an optional peer dependency, so install it in the host app: ' +
         `npm install @tanstack/ai. Original error: ${detail}`,
+    );
+  }
+}
+
+/**
+ * The chat adapter for a provider, loaded the same lazy way.
+ *
+ * The adapters live in SEPARATE packages — `@tanstack/ai-anthropic`,
+ * `@tanstack/ai-ollama` — so they are optional peers too, and the import has
+ * to be behind the same gate. Importing both eagerly to pick one at runtime
+ * would defeat the point: a host that only ever uses Ollama would still need
+ * the Anthropic package installed.
+ *
+ * Only the selected provider's package is touched.
+ */
+export async function loadAdapter(config: {
+  provider: 'anthropic' | 'ollama';
+  model: string;
+  apiKey?: string;
+  baseURL?: string;
+}): Promise<AnyTextAdapter> {
+  if (config.provider === 'anthropic') {
+    const mod = await importOrExplain('@tanstack/ai-anthropic');
+    return mod.createAnthropicChat({
+      apiKey: config.apiKey,
+      model: config.model,
+    } as never) as AnyTextAdapter;
+  }
+
+  const mod = await importOrExplain('@tanstack/ai-ollama');
+  return mod.createOllamaChat(config.model as never, config.baseURL) as AnyTextAdapter;
+}
+
+/**
+ * Dynamic import with an error that says what to do.
+ *
+ * A missing optional peer surfaces as a bare ERR_MODULE_NOT_FOUND naming a
+ * package the operator never asked for, which reads as a bug in the plugin
+ * rather than as a deliberate install-time choice.
+ */
+async function importOrExplain<T extends string>(specifier: T) {
+  try {
+    return (await import(specifier)) as never as {
+      createAnthropicChat: (o: unknown) => unknown;
+      createOllamaChat: (m: unknown, b?: string) => unknown;
+    };
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `[tanstack-ai] chat is enabled but ${specifier} could not be loaded. ` +
+        `It is an optional peer dependency, so install it in the host app: ` +
+        `npm install ${specifier}. Original error: ${detail}`,
     );
   }
 }
