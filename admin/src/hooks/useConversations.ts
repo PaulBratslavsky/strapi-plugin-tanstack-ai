@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   createConversation,
   deleteConversation,
@@ -42,6 +42,36 @@ export function useConversations() {
   const [initialMessages, setInitialMessages] = useState<Message[]>([]);
   const [error, setError] = useState<string | null>(null);
 
+  /**
+   * The active id as a REF, and every save queued behind the last one.
+   *
+   * Both exist for one bug, which the browser test caught as two identical
+   * conversations in the sidebar. Saving is triggered by the streaming edge,
+   * and that edge can fire more than once for a single turn — a tool call ends
+   * a step, and React's development StrictMode re-invokes effects besides. Two
+   * saves then start before `activeId` STATE has updated from the first, so
+   * both read `null` from their closure, both take the create branch, and the
+   * conversation is duplicated.
+   *
+   * The ref is written synchronously the moment a conversation is created, and
+   * the chain guarantees the second save reads it only after the first has
+   * finished — so it updates the row the first one made.
+   */
+  const activeIdRef = useRef<string | null>(null);
+  const chainRef = useRef<Promise<unknown>>(Promise.resolve());
+
+  /**
+   * Has the user already chosen a conversation (or started a new one)?
+   *
+   * The mount load auto-opens the most recent conversation, and it resolves
+   * asynchronously. Someone who clicks "New chat" in that window had their
+   * choice silently overwritten when the fetch landed — and because the
+   * clobber restored an id, the next reply was saved into the conversation
+   * they thought they had left. A browser test caught it as a PUT where a POST
+   * was expected.
+   */
+  const userChoseRef = useRef(false);
+
   // On mount: list them, and open the most recent, so the panel resumes where
   // the user left off rather than presenting an empty box beside a full list.
   useEffect(() => {
@@ -52,7 +82,10 @@ export function useConversations() {
         setConversations(list);
         if (list.length === 0) return;
         const newest = await fetchConversation(list[0].documentId);
-        if (cancelled) return;
+        // Re-checked AFTER the await, not before: the user may have acted
+        // while this request was in flight, and their choice wins.
+        if (cancelled || userChoseRef.current) return;
+        activeIdRef.current = newest.documentId;
         setActiveId(newest.documentId);
         setInitialMessages((newest.messages as Message[]) ?? []);
       })
@@ -65,8 +98,10 @@ export function useConversations() {
   }, []);
 
   const selectConversation = useCallback(async (documentId: string) => {
+    userChoseRef.current = true;
     try {
       const conversation = await fetchConversation(documentId);
+      activeIdRef.current = documentId;
       setActiveId(documentId);
       setInitialMessages((conversation.messages as Message[]) ?? []);
       setError(null);
@@ -76,6 +111,8 @@ export function useConversations() {
   }, []);
 
   const startNewConversation = useCallback(() => {
+    userChoseRef.current = true;
+    activeIdRef.current = null;
     setActiveId(null);
     setInitialMessages([]);
   }, []);
@@ -86,23 +123,29 @@ export function useConversations() {
    * The first save CREATES and adopts the new id, so the next save updates the
    * same row instead of forking a second conversation on every reply.
    */
-  const saveMessages = useCallback(
-    async (messages: Message[]) => {
-      if (messages.length === 0) return;
-      const title = titleFrom(messages);
+  const saveMessages = useCallback(async (messages: Message[]) => {
+    if (messages.length === 0) return;
+    const title = titleFrom(messages);
 
+    // Queued behind whatever is already in flight, and reading the id from
+    // the ref rather than this closure — see the refs above.
+    const run = chainRef.current.then(async () => {
+      const current = activeIdRef.current;
       try {
-        if (activeId) {
-          await updateConversation(activeId, { title, messages });
+        if (current) {
+          await updateConversation(current, { title, messages });
           setConversations((prev) =>
             prev.map((c) =>
-              c.documentId === activeId
+              c.documentId === current
                 ? { ...c, title, updatedAt: new Date().toISOString() }
                 : c,
             ),
           );
         } else {
           const created = await createConversation({ title, messages });
+          // Written SYNCHRONOUSLY, before any await: the next queued save must
+          // see this id, and React state would not have updated by then.
+          activeIdRef.current = created.documentId;
           // LOAD-BEARING, and it looks redundant. Adopting the new id changes
           // `activeId`, which re-runs the panel's seeding effect — and that
           // effect writes `initialMessages` into the transcript. Left at the
@@ -126,16 +169,21 @@ export function useConversations() {
         // identical to one that is saving, until the page is reloaded.
         setError(`Could not save this conversation: ${String(cause)}`);
       }
-    },
-    [activeId],
-  );
+    });
+
+    // The chain must not break on a failed save, or every later save is
+    // dropped with it.
+    chainRef.current = run.catch(() => undefined);
+    return run;
+  }, []);
 
   const removeConversation = useCallback(
     async (documentId: string) => {
       try {
         await deleteConversation(documentId);
         setConversations((prev) => prev.filter((c) => c.documentId !== documentId));
-        if (activeId === documentId) {
+        if (activeIdRef.current === documentId) {
+          activeIdRef.current = null;
           setActiveId(null);
           setInitialMessages([]);
         }
@@ -143,7 +191,7 @@ export function useConversations() {
         setError(`Could not delete that conversation: ${String(cause)}`);
       }
     },
-    [activeId],
+    [],
   );
 
   return {

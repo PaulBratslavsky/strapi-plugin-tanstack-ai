@@ -57,6 +57,12 @@ const chatRoutes = [
   { method: 'POST', path: '/memories', handler: 'memory.create', config: { policies: [] } },
   { method: 'PUT', path: '/memories/:id', handler: 'memory.update', config: { policies: [] } },
   { method: 'DELETE', path: '/memories/:id', handler: 'memory.delete', config: { policies: [] } },
+
+  // Research notes. Same per-user scoping again.
+  { method: 'GET', path: '/notes', handler: 'note.find', config: { policies: [] } },
+  { method: 'POST', path: '/notes', handler: 'note.create', config: { policies: [] } },
+  { method: 'PUT', path: '/notes/:id', handler: 'note.update', config: { policies: [] } },
+  { method: 'DELETE', path: '/notes/:id', handler: 'note.delete', config: { policies: [] } },
 ];
 
 export default {

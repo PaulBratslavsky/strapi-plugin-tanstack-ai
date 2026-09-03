@@ -32,7 +32,8 @@
     "check:seam": "node scripts/check-seam.mjs",
     "test:e2e": "playwright test",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:e2e:model": "MODEL_TESTS=1 playwright test"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",

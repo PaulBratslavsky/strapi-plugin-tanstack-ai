@@ -3,6 +3,7 @@ import { readConfig } from '../lib/plugin-config';
 import { loadAI, loadAdapter } from '../lib/tanstack-ai';
 import { buildChatTools, type CallerAbility } from '../lib/chat-tools';
 import { buildMemoryTools, memoryPreamble } from '../lib/memory-tools';
+import { buildNoteTools } from '../lib/note-tools';
 
 /**
  * In-admin chat, powered by TanStack AI.
@@ -68,6 +69,10 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
     // behind an action nobody registered would withhold them from everyone.
     if (options?.adminUserId) {
       tools.push(...(await buildMemoryTools(strapi, { adminUserId: options.adminUserId })));
+      // Notes are NOT injected into the prompt the way memories are: a note is
+      // a document, and replaying every one of them would spend the context
+      // window on material this question probably has nothing to do with.
+      tools.push(...(await buildNoteTools(strapi, { adminUserId: options.adminUserId })));
     }
 
     const trimmed = messages.slice(-MAX_TURNS);

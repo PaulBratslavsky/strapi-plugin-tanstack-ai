@@ -58,18 +58,25 @@ const ConversationList = styled.div`
   overflow-y: auto;
 `;
 
-const ConversationItem = styled.button<{ $active: boolean }>`
+/**
+ * The row is a CONTAINER holding two siblings, not a button holding a button.
+ *
+ * Nesting them was a real bug with two faces. A button inside a button is
+ * invalid HTML that browsers recover from unpredictably — and the accessible
+ * name of the outer control then absorbs the inner one's label, so the row
+ * announced itself as "<title> Delete conversation: <title>". A test looking
+ * for the delete control by name matched BOTH elements, which read as a
+ * duplicated conversation when nothing was duplicated.
+ */
+const ConversationItem = styled.div<{ $active: boolean }>`
   width: 100%;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 4px;
-  padding: 10px 12px;
-  border: none;
+  padding: 0 12px 0 0;
   background: ${({ $active, theme }) =>
     $active ? theme.colors.neutral200 : 'transparent'};
-  cursor: pointer;
-  text-align: left;
 
   &:hover {
     background: ${({ theme }) => theme.colors.neutral200};
@@ -83,7 +90,19 @@ const ConversationItem = styled.button<{ $active: boolean }>`
   }
 `;
 
-const DeleteBtn = styled.span`
+const SelectBtn = styled.button`
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  padding: 10px 0 10px 12px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+`;
+
+const DeleteBtn = styled.button`
   opacity: 0;
   transition: opacity 0.15s;
   flex-shrink: 0;
@@ -144,34 +163,18 @@ export function ConversationSidebar({
         {conversations.map((conversation) => (
           <ConversationItem
             key={conversation.documentId}
-            type="button"
             $active={conversation.documentId === activeId}
-            onClick={() => onSelect(conversation.documentId)}
           >
-            <TitleText variant="omega" textColor="neutral800">
-              {conversation.title}
-            </TitleText>
-            {/*
-              A <span>, not a nested <button>: a button inside a button is
-              invalid HTML and browsers recover from it unpredictably. The row
-              is the button; this is a click target within it that stops
-              propagation so selecting and deleting stay distinct.
-            */}
+            <SelectBtn type="button" onClick={() => onSelect(conversation.documentId)}>
+              <TitleText variant="omega" textColor="neutral800">
+                {conversation.title}
+              </TitleText>
+            </SelectBtn>
             <DeleteBtn
+              type="button"
               className="delete-btn"
-              role="button"
-              tabIndex={0}
               aria-label={`Delete conversation: ${conversation.title}`}
-              onClick={(event) => {
-                event.stopPropagation();
-                onDelete(conversation.documentId);
-              }}
-              onKeyDown={(event) => {
-                if (event.key !== 'Enter' && event.key !== ' ') return;
-                event.preventDefault();
-                event.stopPropagation();
-                onDelete(conversation.documentId);
-              }}
+              onClick={() => onDelete(conversation.documentId)}
             >
               <Trash />
             </DeleteBtn>

@@ -1,0 +1,26 @@
+{
+  "kind": "collectionType",
+  "collectionName": "tanstack_ai_notes",
+  "info": {
+    "singularName": "note",
+    "pluralName": "notes",
+    "displayName": "TanStack AI Note"
+  },
+  "options": { "draftAndPublish": false },
+  "pluginOptions": {
+    "content-manager": { "visible": false },
+    "content-type-builder": { "visible": false }
+  },
+  "attributes": {
+    "title": { "type": "string" },
+    "content": { "type": "text", "required": true },
+    "category": {
+      "type": "enumeration",
+      "enum": ["research", "snippet", "idea", "reference"],
+      "default": "research"
+    },
+    "tags": { "type": "text" },
+    "source": { "type": "string" },
+    "adminUserId": { "type": "integer", "required": true }
+  }
+}

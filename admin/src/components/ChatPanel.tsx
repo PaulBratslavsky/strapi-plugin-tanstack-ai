@@ -7,8 +7,10 @@ import { authHeaders, backendURL } from '../utils/auth';
 import type { Message } from '../hooks/chat-messages';
 import { useConversations } from '../hooks/useConversations';
 import { useMemories } from '../hooks/useMemories';
+import { useNotes } from '../hooks/useNotes';
 import { ConversationSidebar } from './ConversationSidebar';
 import { MemoryPanel } from './MemoryPanel';
+import { NotePanel } from './NotePanel';
 import { MessageList } from './MessageList';
 import { ChatInput } from './ChatInput';
 
@@ -72,6 +74,22 @@ const ChatTopBar = styled.div`
   gap: 8px;
 `;
 
+/**
+ * The hint gives up its space before the controls do.
+ *
+ * With the sidebar and both panels open, the chat column is narrow enough that
+ * flex would otherwise wrap this sentence into a four-line column and shove
+ * the buttons around. It truncates instead — the controls are what the bar is
+ * for.
+ */
+const TopBarHint = styled.div`
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+`;
+
 const TopBarButton = styled.button`
   display: flex;
   align-items: center;
@@ -102,6 +120,7 @@ export function ChatPanel() {
   const [input, setInput] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [memoryPanelOpen, setMemoryPanelOpen] = useState(false);
+  const [notePanelOpen, setNotePanelOpen] = useState(false);
   // Reported by the stream itself rather than fetched separately: the answer
   // knows which model produced it, so there is no second source to fall out of
   // step with the first.
@@ -129,6 +148,8 @@ export function ChatPanel() {
     removeMemory,
     refresh: refreshMemories,
   } = useMemories();
+
+  const { notes, error: noteError, editNote, removeNote, refresh: refreshNotes } = useNotes();
 
   const { messages, setMessages, sendMessage, isLoading, error, stop, clear } = useChat({
     connection: fetchServerSentEvents(`${backendURL()}/${PLUGIN_ID}/chat`, () => ({
@@ -169,9 +190,10 @@ export function ChatPanel() {
     if (wasLoadingRef.current && !isLoading && messages.length > 0) {
       void saveMessages(messages as unknown as Message[]);
       void refreshMemories();
+      void refreshNotes();
     }
     wasLoadingRef.current = isLoading;
-  }, [isLoading, messages, saveMessages, refreshMemories]);
+  }, [isLoading, messages, saveMessages, refreshMemories, refreshNotes]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
@@ -208,18 +230,27 @@ export function ChatPanel() {
           </TopBarButton>
           {model ? (
             <Badge>{model}</Badge>
-          ) : (
-            <Typography variant="pi" textColor="neutral600">
-              Ask about your content types or search across all of them.
-            </Typography>
-          )}
-          <div style={{ flex: 1 }} />
+          ) : null}
+          <TopBarHint>
+            {!model && (
+              <Typography variant="pi" textColor="neutral600">
+                Ask about your content types or search across all of them.
+              </Typography>
+            )}
+          </TopBarHint>
           <TopBarButton
             type="button"
             onClick={() => setMemoryPanelOpen((open) => !open)}
             aria-expanded={memoryPanelOpen}
           >
             Memories ({memories.length})
+          </TopBarButton>
+          <TopBarButton
+            type="button"
+            onClick={() => setNotePanelOpen((open) => !open)}
+            aria-expanded={notePanelOpen}
+          >
+            Notes ({notes.length})
           </TopBarButton>
           {/*
           "New chat" rather than "Clear": the transcript is persisted now, so
@@ -246,12 +277,12 @@ export function ChatPanel() {
           isLoading={isLoading}
         />
 
-        {(error || historyError) && (
+        {(error || historyError || memoryError || noteError) && (
           <Box padding={3} background="danger100" marginLeft={4} marginRight={4}>
             <Typography textColor="danger600">
               {error
                 ? `Error: ${error instanceof Error ? error.message : String(error)}`
-                : historyError}
+                : (historyError ?? memoryError ?? noteError)}
             </Typography>
           </Box>
         )}
@@ -270,6 +301,7 @@ export function ChatPanel() {
         onAdd={addMemory}
         onDelete={removeMemory}
       />
+      <NotePanel notes={notes} open={notePanelOpen} onEdit={editNote} onDelete={removeNote} />
     </ChatLayout>
   );
 }
