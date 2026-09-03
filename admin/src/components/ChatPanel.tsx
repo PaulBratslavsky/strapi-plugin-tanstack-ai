@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import * as tanstackAiReact from '@tanstack/ai-react';
-import { Badge, Box, Flex, Typography } from '@strapi/design-system';
+import { Badge, Box, Typography } from '@strapi/design-system';
 import styled from 'styled-components';
 import { PLUGIN_ID } from '../pluginId';
 import { authHeaders, backendURL } from '../utils/auth';
 import type { Message } from '../hooks/chat-messages';
+import { useConversations } from '../hooks/useConversations';
+import { ConversationSidebar } from './ConversationSidebar';
 import { MessageList } from './MessageList';
 import { ChatInput } from './ChatInput';
 
@@ -44,13 +46,20 @@ const { useChat, fetchServerSentEvents } = tanstackAiReact;
 
 const ChatLayout = styled.div`
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   height: calc(100vh - 320px);
   min-height: 400px;
   border-radius: 4px;
   overflow: hidden;
   box-shadow: ${({ theme }) => theme.shadows.tableShadow};
   background: ${({ theme }) => theme.colors.neutral0};
+`;
+
+const ChatColumn = styled.div`
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
 `;
 
 const ChatTopBar = styled.div`
@@ -89,13 +98,28 @@ const TopBarButton = styled.button`
 
 export function ChatPanel() {
   const [input, setInput] = useState('');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   // Reported by the stream itself rather than fetched separately: the answer
   // knows which model produced it, so there is no second source to fall out of
   // step with the first.
   const [model, setModel] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  // Tracks the streaming edge so the transcript is saved once, when a turn
+  // ENDS — not on every token, which would be a write per frame.
+  const wasLoadingRef = useRef(false);
 
-  const { messages, sendMessage, isLoading, error, stop, clear } = useChat({
+  const {
+    conversations,
+    activeId,
+    initialMessages,
+    error: historyError,
+    selectConversation,
+    startNewConversation,
+    saveMessages,
+    removeConversation,
+  } = useConversations();
+
+  const { messages, setMessages, sendMessage, isLoading, error, stop, clear } = useChat({
     connection: fetchServerSentEvents(`${backendURL()}/${PLUGIN_ID}/chat`, () => ({
       // Resolved per request, not captured once: a token refreshed mid-session
       // would otherwise leave this panel authenticating with a stale one.
@@ -107,6 +131,30 @@ export function ChatPanel() {
       if (reported) setModel(reported);
     },
   });
+
+  /**
+   * Seed the transcript when a conversation is opened.
+   *
+   * Done through `setMessages` in an effect rather than an initial-value
+   * option, because history arrives ASYNCHRONOUSLY: the first render has none
+   * and the fetch resolves later. An option read once at construction would
+   * never adopt it — the reference plugin hit exactly this, and the symptom is
+   * a panel that renders the right NUMBER of bubbles with nothing in them.
+   *
+   * Keyed on `activeId` so switching conversations replaces the transcript,
+   * and starting a new one clears it.
+   */
+  useEffect(() => {
+    setMessages(initialMessages as never);
+  }, [activeId, initialMessages, setMessages]);
+
+  // Save when a turn finishes: isLoading true -> false.
+  useEffect(() => {
+    if (wasLoadingRef.current && !isLoading && messages.length > 0) {
+      void saveMessages(messages as unknown as Message[]);
+    }
+    wasLoadingRef.current = isLoading;
+  }, [isLoading, messages, saveMessages]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
@@ -121,45 +169,77 @@ export function ChatPanel() {
 
   return (
     <ChatLayout>
-      <ChatTopBar>
-        {model ? (
-          <Badge>{model}</Badge>
-        ) : (
-          <Typography variant="pi" textColor="neutral600">
-            Ask about your content types or search across all of them.
-          </Typography>
+      <ConversationSidebar
+        conversations={conversations}
+        activeId={activeId}
+        open={sidebarOpen}
+        onSelect={selectConversation}
+        onNew={() => {
+          startNewConversation();
+          clear();
+        }}
+        onDelete={removeConversation}
+      />
+      <ChatColumn>
+        <ChatTopBar>
+          <TopBarButton
+            type="button"
+            onClick={() => setSidebarOpen((open) => !open)}
+            aria-expanded={sidebarOpen}
+          >
+            {sidebarOpen ? 'Hide history' : 'History'}
+          </TopBarButton>
+          {model ? (
+            <Badge>{model}</Badge>
+          ) : (
+            <Typography variant="pi" textColor="neutral600">
+              Ask about your content types or search across all of them.
+            </Typography>
+          )}
+          <div style={{ flex: 1 }} />
+          {/*
+          "New chat" rather than "Clear": the transcript is persisted now, so
+          emptying the panel starts a new conversation instead of destroying
+          the current one. Clearing only the view would silently detach it from
+          the row it had been saving to, and the next reply would append to a
+          conversation the user believed they had discarded.
+        */}
+          <TopBarButton
+            type="button"
+            onClick={() => {
+              startNewConversation();
+              clear();
+            }}
+            disabled={messages.length === 0 || isLoading}
+          >
+            New chat
+          </TopBarButton>
+        </ChatTopBar>
+
+        <MessageList
+          ref={messagesEndRef}
+          messages={messages as unknown as Message[]}
+          isLoading={isLoading}
+        />
+
+        {(error || historyError) && (
+          <Box padding={3} background="danger100" marginLeft={4} marginRight={4}>
+            <Typography textColor="danger600">
+              {error
+                ? `Error: ${error instanceof Error ? error.message : String(error)}`
+                : historyError}
+            </Typography>
+          </Box>
         )}
-        <div style={{ flex: 1 }} />
-        <TopBarButton
-          type="button"
-          onClick={() => clear()}
-          disabled={messages.length === 0 || isLoading}
-        >
-          Clear
-        </TopBarButton>
-      </ChatTopBar>
 
-      <MessageList
-        ref={messagesEndRef}
-        messages={messages as unknown as Message[]}
-        isLoading={isLoading}
-      />
-
-      {error && (
-        <Box padding={3} background="danger100" marginLeft={4} marginRight={4}>
-          <Typography textColor="danger600">
-            Error: {error instanceof Error ? error.message : String(error)}
-          </Typography>
-        </Box>
-      )}
-
-      <ChatInput
-        input={input}
-        isLoading={isLoading}
-        onInputChange={setInput}
-        onSend={handleSend}
-        onStop={() => stop()}
-      />
+        <ChatInput
+          input={input}
+          isLoading={isLoading}
+          onInputChange={setInput}
+          onSend={handleSend}
+          onStop={() => stop()}
+        />
+      </ChatColumn>
     </ChatLayout>
   );
 }

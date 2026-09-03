@@ -132,4 +132,92 @@ test.describe('TanStack AI admin panel', () => {
     // than the button merely being clicked.
     await expect(page.getByRole('button', { name: /^send$/i })).toBeVisible({ timeout: 30_000 });
   });
+
+  test('chat history survives a reload and can be switched', async ({ page }) => {
+    // The whole point of persistence, and the only check that can catch the
+    // subtle failure here: the panel adopts a new conversation id the moment
+    // the first turn is saved, which re-runs the effect that seeds the
+    // transcript. Seeded from the wrong state, that effect wipes the messages
+    // one render AFTER saving them — the reload is what exposes it.
+    test.setTimeout(300_000);
+    await openPanel(page);
+
+    const composer = composerOf(page);
+    await expect(composer).toBeVisible({ timeout: 30_000 });
+
+    // START A NEW CONVERSATION FIRST, and this is what makes the test able to
+    // fail. On mount the panel reopens the most recent conversation, so a save
+    // takes the UPDATE path; the bug lives in the CREATE path, where adopting
+    // the brand-new id re-runs the seeding effect. Without this click the test
+    // passes with the bug present — verified by mutation.
+    const newChat = page.getByRole('button', { name: /^new chat$/i });
+    if (await newChat.isEnabled()) await newChat.click();
+
+    const question = `Reply with only the word saved (${Date.now()})`;
+    await composer.fill(question);
+    await page.getByRole('button', { name: /^send$/i }).click();
+    // Wait for the turn to END: saving is triggered by the streaming edge.
+    await expect(page.getByRole('button', { name: /^send$/i })).toBeVisible({
+      timeout: 280_000,
+    });
+
+    // BEFORE reloading, and only AFTER the save has been adopted.
+    //
+    // Saving a new conversation adopts its fresh id, which re-runs the effect
+    // that seeds the transcript — and seeded from the empty list this
+    // conversation began with, that effect blanks the panel one render after
+    // the answer arrives. The data is stored safely either way, so a reload
+    // repaints from the server and hides the bug completely.
+    //
+    // Asserting straight after the turn is not enough either: `toHaveCount`
+    // polls until true and is satisfied TRANSIENTLY, passing on an observation
+    // taken before the wipe. Verified — with the bug present, this test passed
+    // until the wait below was added. So wait for the sidebar row to appear,
+    // which is the observable signal that the create completed and its id was
+    // adopted, and only then check that the transcript survived it.
+    await page.getByRole('button', { name: /history/i }).click();
+    const savedRow = page.getByRole('button', { name: /^Delete conversation: Reply with only/ });
+    await expect(savedRow.first()).toBeVisible({ timeout: 30_000 });
+
+    await expect(
+      page.locator('[data-message-role="user"]').filter({ hasText: question }),
+    ).toHaveCount(1);
+
+    await page.reload();
+    await expect(composerOf(page)).toBeVisible({ timeout: 30_000 });
+
+    // The most recent conversation is reopened on mount, so the question is
+    // back in the TRANSCRIPT without touching the sidebar. Scoped to the user
+    // turn: the sidebar row carries the same text as its title (it is in the
+    // DOM even while collapsed), so an unscoped match is ambiguous rather than
+    // wrong.
+    const restored = page.locator('[data-message-role="user"]').filter({ hasText: question });
+    await expect(restored).toHaveCount(1, { timeout: 30_000 });
+
+    // And it is still listed in the sidebar, titled from the first user
+    // message.
+    await page.getByRole('button', { name: /history/i }).click();
+    await expect(
+      page.getByRole('button', { name: /^Delete conversation: Reply with only/ }).first(),
+    ).toBeVisible();
+  });
+
+  test('New chat leaves the saved conversation alone', async ({ page }) => {
+    // "New chat" clears the view. If it only cleared the view without
+    // detaching from the active row, the next reply would append to a
+    // conversation the user believed they had left.
+    await openPanel(page);
+    await expect(composerOf(page)).toBeVisible({ timeout: 30_000 });
+
+    const before = await page.locator('[data-message-role]').count();
+    expect(before).toBeGreaterThan(0);
+
+    await page.getByRole('button', { name: /^new chat$/i }).click();
+    await expect(page.locator('[data-message-role]')).toHaveCount(0);
+
+    // The history it left is still on the server.
+    await page.reload();
+    await page.getByRole('button', { name: /history/i }).click();
+    await expect(page.getByText(/no conversations yet/i)).toHaveCount(0);
+  });
 });

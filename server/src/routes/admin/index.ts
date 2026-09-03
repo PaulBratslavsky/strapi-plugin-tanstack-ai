@@ -36,6 +36,19 @@ const chatRoutes = [
       policies: [],
     },
   },
+
+  // History. Registered alongside chat rather than always, because a
+  // conversation store with no chat to fill it is dead surface — and every
+  // handler here would 401 anyway, since they key off the admin session.
+  //
+  // No policies: each handler scopes its query to `ctx.state.user.id` and
+  // re-checks ownership on any row it was given by id. Authorisation that
+  // depends on the ROW cannot be expressed as a route policy.
+  { method: 'GET', path: '/conversations', handler: 'conversation.find', config: { policies: [] } },
+  { method: 'GET', path: '/conversations/:id', handler: 'conversation.findOne', config: { policies: [] } },
+  { method: 'POST', path: '/conversations', handler: 'conversation.create', config: { policies: [] } },
+  { method: 'PUT', path: '/conversations/:id', handler: 'conversation.update', config: { policies: [] } },
+  { method: 'DELETE', path: '/conversations/:id', handler: 'conversation.delete', config: { policies: [] } },
 ];
 
 export default {

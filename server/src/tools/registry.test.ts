@@ -14,6 +14,9 @@ import { actionDefinitionForTool, actionForTool } from '../lib/tool-permissions'
  */
 const STRAPI_ACTION_UID = /^[a-z]([a-z|.|-]+)[a-z]$/;
 
+/** Stand-in for the MCP handler context the schema resolvers are handed. */
+const HANDLER_CONTEXT = {} as never;
+
 /**
  * The structural test.
  *
@@ -39,12 +42,14 @@ describe.each(ALL_TOOLS.map((tool) => [tool.name, tool] as const))('%s', (name, 
   });
 
   it('takes a ZodObject as input', () => {
-    expect(tool.resolveInputSchema()).toBeInstanceOf(z.ZodObject);
+    // The resolvers receive the MCP handler context; neither tool reads it,
+    // but the signature is part of the contract, so pass one.
+    expect(tool.resolveInputSchema?.(HANDLER_CONTEXT)).toBeInstanceOf(z.ZodObject);
   });
 
   it('declares a ZodObject output schema', () => {
     // Without one the model gets prose it has to parse; with one it gets data.
-    expect(tool.resolveOutputSchema()).toBeInstanceOf(z.ZodObject);
+    expect(tool.resolveOutputSchema(HANDLER_CONTEXT)).toBeInstanceOf(z.ZodObject);
   });
 
   it('is gated behind an action this plugin actually registers', () => {
