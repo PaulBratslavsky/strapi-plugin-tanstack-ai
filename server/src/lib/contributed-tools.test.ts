@@ -18,15 +18,31 @@ const validTool = (name: string) => ({
   execute: async () => ({ ok: true }),
 });
 
-function fakeStrapi(plugins: Record<string, unknown>) {
+/**
+ * A Strapi whose action provider knows about `registered` action ids.
+ *
+ * Every contributed tool now has to be gated by an action its OWN plugin
+ * registered, so the fake has to model that registry — without it, discovery
+ * correctly withholds everything and the tests would be asserting on an empty
+ * list while appearing to pass for the wrong reason.
+ */
+function fakeStrapi(plugins: Record<string, unknown>, registered: string[] = []) {
   const warn = vi.fn();
+  const known = new Set(registered);
   const strapi = {
     plugins,
     plugin: (name: string) => plugins[name],
+    service: (name: string) =>
+      name === 'admin::permission'
+        ? { actionProvider: { get: (id: string) => (known.has(id) ? { actionId: id } : undefined) } }
+        : undefined,
     log: { warn, info: vi.fn(), debug: vi.fn(), error: vi.fn() },
   } as unknown as Core.Strapi;
   return { strapi, warn };
 }
+
+/** The action a plugin is expected to have registered for one of its tools. */
+const actionFor = (plugin: string, slug: string) => `plugin::${plugin}.tool.${slug}`;
 
 const contributor = (tools: unknown[], meta?: unknown) => ({
   service: (name: string) =>
@@ -39,12 +55,15 @@ describe('discoverContributedTools', () => {
   it('finds tools behind an ai-tools service and namespaces them', () => {
     // The namespace is what stops a second plugin's `search` shadowing the
     // first's — and `__` because single underscores already appear in names.
-    const { strapi } = fakeStrapi({
-      'youtube-transcripts': contributor([validTool('listTranscripts')], {
-        label: 'YouTube Transcripts',
-        description: 'video transcripts',
-      }),
-    });
+    const { strapi } = fakeStrapi(
+      {
+        'youtube-transcripts': contributor([validTool('listTranscripts')], {
+          label: 'YouTube Transcripts',
+          description: 'video transcripts',
+        }),
+      },
+      [actionFor('youtube-transcripts', 'list-transcripts')],
+    );
     const [source] = discoverContributedTools(strapi);
     expect(source.id).toBe('youtube-transcripts');
     expect(source.label).toBe('YouTube Transcripts');
@@ -63,16 +82,19 @@ describe('discoverContributedTools', () => {
   });
 
   it('falls back to the plugin name when no meta is given', () => {
-    const { strapi } = fakeStrapi({ 'plain-plugin': contributor([validTool('a')]) });
+    const { strapi } = fakeStrapi({ 'plain-plugin': contributor([validTool('a')]) }, [
+      actionFor('plain-plugin', 'a'),
+    ]);
     expect(discoverContributedTools(strapi)[0].label).toBe('plain-plugin');
   });
 
   it('drops a malformed tool but keeps its siblings', () => {
     // A tool with no handler fails deep in the agent loop, where the error
     // names neither the tool nor the plugin that supplied it.
-    const { strapi, warn } = fakeStrapi({
-      p: contributor([{ name: 'broken', description: 'x', schema: {} }, validTool('good')]),
-    });
+    const { strapi, warn } = fakeStrapi(
+      { p: contributor([{ name: 'broken', description: 'x', schema: {} }, validTool('good')]) },
+      [actionFor('p', 'good')],
+    );
     const [source] = discoverContributedTools(strapi);
     expect(source.tools.map((t) => t.tool.name)).toEqual(['good']);
     expect(warn).toHaveBeenCalled();
@@ -81,14 +103,17 @@ describe('discoverContributedTools', () => {
   it('survives a plugin whose service throws', () => {
     // One badly-behaved plugin must not stop the others being found, and must
     // certainly not take out the chat.
-    const { strapi, warn } = fakeStrapi({
-      bad: {
-        service: () => {
-          throw new Error('boom');
+    const { strapi, warn } = fakeStrapi(
+      {
+        bad: {
+          service: () => {
+            throw new Error('boom');
+          },
         },
+        good: contributor([validTool('a')]),
       },
-      good: contributor([validTool('a')]),
-    });
+      [actionFor('good', 'a')],
+    );
     expect(discoverContributedTools(strapi).map((s) => s.id)).toEqual(['good']);
     expect(warn).not.toHaveBeenCalled(); // resolve() swallows; discovery continues
   });
@@ -102,16 +127,18 @@ describe('discoverContributedTools', () => {
   });
 
   it('skips a duplicate namespaced name rather than shadowing', () => {
-    const { strapi, warn } = fakeStrapi({
-      p: contributor([validTool('same'), validTool('same')]),
-    });
+    const { strapi, warn } = fakeStrapi({ p: contributor([validTool('same'), validTool('same')]) }, [
+      actionFor('p', 'same'),
+    ]);
     expect(discoverContributedTools(strapi)[0].tools).toHaveLength(1);
     expect(warn).toHaveBeenCalled();
   });
 
   it('sanitises a plugin id that is not tool-name safe', () => {
     // Tool names may only contain [a-zA-Z0-9_-]; plugin ids are not so limited.
-    const { strapi } = fakeStrapi({ 'weird.name!': contributor([validTool('a')]) });
+    const { strapi } = fakeStrapi({ 'weird.name!': contributor([validTool('a')]) }, [
+      actionFor('weird.name!', 'a'),
+    ]);
     expect(discoverContributedTools(strapi)[0].tools[0].namespacedName).toBe('weird_name___a');
   });
 });
@@ -129,10 +156,10 @@ describe('buildContributedTools', () => {
   };
 
   const twoPlugins = () =>
-    fakeStrapi({
-      alpha: contributor([validTool('one')]),
-      beta: contributor([validTool('two')]),
-    }).strapi;
+    fakeStrapi(
+      { alpha: contributor([validTool('one')]), beta: contributor([validTool('two')]) },
+      [actionFor('alpha', 'one'), actionFor('beta', 'two')],
+    ).strapi;
 
   it('offers every source when none is stated', async () => {
     // `undefined` means "the panel has not said", not "none" — sending none

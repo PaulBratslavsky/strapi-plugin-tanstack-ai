@@ -31,6 +31,86 @@ export type ChatMessage = {
  */
 const MAX_TURNS = 20;
 
+/**
+ * The SDK's tool type, taken from the builder rather than restated.
+ *
+ * Widening this to `unknown[]` compiles here and fails at the `chat()` call
+ * site with an error about `~toolKind` that names nothing recognisable.
+ */
+type ChatTools = Awaited<ReturnType<typeof buildChatTools>>;
+
+export interface PreambleOptions {
+  system?: string;
+  ability?: CallerAbility;
+  adminUserId?: number;
+  enabledToolSources?: string[];
+}
+
+/**
+ * The system prompt and tool set for one caller.
+ *
+ * Extracted so `/context-info` can measure exactly what a chat turn would
+ * send, rather than approximating it. The reference plugin makes the same
+ * point: the tool set is filtered by role, so two admins on one install face
+ * different preambles, and the one with more tools is the one closer to the
+ * edge. A measurement built from a general-purpose reconstruction would report
+ * neither of them.
+ */
+export async function buildPreamble(
+  strapi: Core.Strapi,
+  options?: PreambleOptions,
+): Promise<{ system: string | undefined; tools: ChatTools }> {
+  const tools = await buildChatTools(strapi, { ability: options?.ability });
+
+  // Memory tools only exist when we know WHOSE memories they are. They are
+  // not RBAC-filtered like the tools above: they touch only the caller's own
+  // rows, so the admin session is itself the authorisation, and gating them
+  // behind an action nobody registered would withhold them from everyone.
+  if (options?.adminUserId) {
+    tools.push(...(await buildMemoryTools(strapi, { adminUserId: options.adminUserId })));
+    // Notes are NOT injected into the prompt the way memories are: a note is
+    // a document, and replaying every one of them would spend the context
+    // window on material this question probably has nothing to do with.
+    tools.push(...(await buildNoteTools(strapi, { adminUserId: options.adminUserId })));
+  }
+
+  // Tools other installed plugins contribute through an `ai-tools` service.
+  // Discovered per request rather than cached at boot: a plugin can be
+  // enabled or disabled without restarting this one, and the cost is a walk
+  // over `strapi.plugins`.
+  tools.push(
+    ...(await buildContributedTools(strapi, {
+      ...(options?.enabledToolSources ? { enabledSources: options.enabledToolSources } : {}),
+      // The caller's grants, checked against the action the OWNING plugin
+      // registered. Omitting this was not a smaller version of the feature:
+      // the filter inside only runs when an ability is supplied, so the
+      // whole gate would have been dead code.
+      ...(options?.ability ? { ability: options.ability } : {}),
+    })),
+  );
+
+  // DERIVED from the tools actually passed, never hand-written. A prompt
+  // that advertises a tool the model was not given makes it promise things
+  // it cannot do; one that omits a tool it has makes it never reach for it.
+  const toolNames = tools.map((tool) => (tool as { name?: string }).name).filter(Boolean);
+  const toolNote =
+    toolNames.length > 0
+      ? `\n\nTOOLS AVAILABLE: ${toolNames.join(', ')}. Use them to answer questions ` +
+        "about this Strapi instance's content rather than guessing."
+      : '';
+
+  // Saved memories go in FRONT of the model every turn rather than waiting
+  // for it to call `recall_memories`. A model that has never been told it
+  // has memories has no reason to go looking for them, so a recall-only
+  // design remembers nothing in practice.
+  const memories = options?.adminUserId
+    ? await memoryPreamble(strapi, options.adminUserId)
+    : '';
+
+  const composed = `${options?.system ?? ''}${toolNote}${memories}`.trim();
+  return { system: composed.length > 0 ? composed : undefined, tools };
+}
+
 export default ({ strapi }: { strapi: Core.Strapi }) => ({
   /**
    * Stream an answer.
@@ -67,29 +147,7 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
 
     // Filtered by the caller's own grants, so the model is offered exactly the
     // tools this admin could have used over MCP — no more.
-    const tools = await buildChatTools(strapi, { ability: options?.ability });
-
-    // Memory tools only exist when we know WHOSE memories they are. They are
-    // not RBAC-filtered like the tools above: they touch only the caller's own
-    // rows, so the admin session is itself the authorisation, and gating them
-    // behind an action nobody registered would withhold them from everyone.
-    if (options?.adminUserId) {
-      tools.push(...(await buildMemoryTools(strapi, { adminUserId: options.adminUserId })));
-      // Notes are NOT injected into the prompt the way memories are: a note is
-      // a document, and replaying every one of them would spend the context
-      // window on material this question probably has nothing to do with.
-      tools.push(...(await buildNoteTools(strapi, { adminUserId: options.adminUserId })));
-    }
-
-    // Tools other installed plugins contribute through an `ai-tools` service.
-    // Discovered per request rather than cached at boot: a plugin can be
-    // enabled or disabled without restarting this one, and the cost is a walk
-    // over `strapi.plugins`.
-    tools.push(
-      ...(await buildContributedTools(strapi, {
-        ...(options?.enabledToolSources ? { enabledSources: options.enabledToolSources } : {}),
-      })),
-    );
+    const { system, tools } = await buildPreamble(strapi, options);
 
     const trimmed = messages.slice(-MAX_TURNS);
 
@@ -97,25 +155,6 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
     // TURN in the array and silently ignores the parameter. Getting this
     // backwards does not error — it drops the system prompt and produces a
     // fluent answer with none of the instructions applied.
-    // DERIVED from the tools actually passed, never hand-written. A prompt
-    // that advertises a tool the model was not given makes it promise things
-    // it cannot do; one that omits a tool it has makes it never reach for it.
-    const toolNames = tools.map((t) => (t as { name?: string }).name).filter(Boolean);
-    const toolNote =
-      toolNames.length > 0
-        ? `\n\nTOOLS AVAILABLE: ${toolNames.join(', ')}. Use them to answer questions ` +
-          'about this Strapi instance\'s content rather than guessing.'
-        : '';
-    // Saved memories go in FRONT of the model every turn rather than waiting
-    // for it to call `recall_memories`. A model that has never been told it
-    // has memories has no reason to go looking for them, so a recall-only
-    // design remembers nothing in practice.
-    const memories = options?.adminUserId
-      ? await memoryPreamble(strapi, options.adminUserId)
-      : '';
-
-    const composed = `${options?.system ?? ''}${toolNote}${memories}`.trim();
-    const system = composed.length > 0 ? composed : undefined;
     const isAnthropic = config.chat.provider === 'anthropic';
 
     // `stream: true` is explicit, not decorative: chat()'s return type is a

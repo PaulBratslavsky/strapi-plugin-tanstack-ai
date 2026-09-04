@@ -3,6 +3,12 @@
   "include": ["./src"],
   "compilerOptions": {
     "rootDir": "../",
-    "baseUrl": "."
+    "baseUrl": ".",
+    // Raised from the ES2020 that @strapi/typescript-utils pins, for
+    // String#replaceAll (ES2021) and the Error `cause` option (ES2022).
+    // Runtime is not the constraint — both landed well before Node 20, which
+    // is Strapi 5's floor — only the compiler's view of the standard library
+    // was behind.
+    "lib": ["ES2022"]
   }
 }

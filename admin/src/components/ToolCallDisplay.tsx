@@ -180,6 +180,12 @@ export function ToolCallDisplay({ toolCall }: Readonly<{ toolCall: ToolCall }>) 
   const links = extractContentLinks(toolCall);
   const running = toolCall.output === undefined && !toolCall.error;
 
+  /** What the expanded panel shows: the failure, the wait, or the result. */
+  let body: string;
+  if (toolCall.error) body = toolCall.error;
+  else if (running) body = 'Waiting for result...';
+  else body = JSON.stringify(toolCall.output, null, 2);
+
   return (
     <ToolCallBox>
       <ToolCallHeader
@@ -206,15 +212,7 @@ export function ToolCallDisplay({ toolCall }: Readonly<{ toolCall: ToolCall }>) 
           ))}
         </ContentLinksRow>
       )}
-      {expanded && (
-        <ToolCallContent>
-          {toolCall.error
-            ? toolCall.error
-            : running
-              ? 'Waiting for result...'
-              : JSON.stringify(toolCall.output, null, 2)}
-        </ToolCallContent>
-      )}
+      {expanded && <ToolCallContent>{body}</ToolCallContent>}
     </ToolCallBox>
   );
 }

@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { Box, Typography } from '@strapi/design-system';
 import { Trash } from '@strapi/icons';
+import { Link } from 'react-router-dom';
 import styled from 'styled-components';
+import { PLUGIN_ID } from '../pluginId';
 import type { Memory } from '../utils/memories-api';
 
 /**
@@ -33,8 +35,24 @@ const PanelRoot = styled.div<{ $open: boolean }>`
 `;
 
 const PanelHeader = styled.div`
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
   padding: 12px 16px;
   border-bottom: 1px solid ${({ theme }) => theme.colors.neutral200};
+`;
+
+/** To the full page, for when the panel is too small to manage in. */
+const ManageLink = styled(Link)`
+  font-size: 11px;
+  color: ${({ theme }) => theme.colors.primary600};
+  text-decoration: none;
+  white-space: nowrap;
+
+  &:hover {
+    text-decoration: underline;
+  }
 `;
 
 const MemoryList = styled.div`
@@ -48,6 +66,11 @@ const MemoryItem = styled.div`
   align-items: flex-start;
   gap: 8px;
   padding: 8px 16px;
+  cursor: pointer;
+
+  &:hover {
+    background: ${({ theme }) => theme.colors.neutral150};
+  }
 
   &:hover .memory-delete,
   & .memory-delete:focus-visible {
@@ -120,11 +143,13 @@ interface MemoryPanelProps {
   memories: Memory[];
   open: boolean;
   onAdd: (data: { content: string }) => void;
+  onEdit: (documentId: string, data: { content: string }) => void;
   onDelete: (documentId: string) => void;
 }
 
-export function MemoryPanel({ memories, open, onAdd, onDelete }: MemoryPanelProps) {
+export function MemoryPanel({ memories, open, onAdd, onEdit, onDelete }: MemoryPanelProps) {
   const [draft, setDraft] = useState('');
+  const [editing, setEditing] = useState<Memory | null>(null);
 
   return (
     <PanelRoot $open={open} aria-hidden={!open}>
@@ -132,11 +157,23 @@ export function MemoryPanel({ memories, open, onAdd, onDelete }: MemoryPanelProp
         <Typography variant="sigma" textColor="neutral600">
           MEMORIES ({memories.length})
         </Typography>
+        <ManageLink to={`/plugins/${PLUGIN_ID}/memories`}>Manage</ManageLink>
       </PanelHeader>
 
       <MemoryList>
         {memories.map((memory) => (
-          <MemoryItem key={memory.documentId} data-memory>
+          <MemoryItem
+            key={memory.documentId}
+            data-memory
+            role="button"
+            tabIndex={0}
+            onClick={() => setEditing(memory)}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter' && event.key !== ' ') return;
+              event.preventDefault();
+              setEditing(memory);
+            }}
+          >
             <MemoryContent>
               <CategoryBadge>{memory.category}</CategoryBadge>
               <Typography variant="omega" textColor="neutral800" style={{ display: 'block' }}>
@@ -146,7 +183,10 @@ export function MemoryPanel({ memories, open, onAdd, onDelete }: MemoryPanelProp
             <DeleteBtn
               type="button"
               className="memory-delete"
-              onClick={() => onDelete(memory.documentId)}
+              onClick={(event) => {
+                event.stopPropagation();
+                onDelete(memory.documentId);
+              }}
               aria-label={`Delete memory: ${memory.content}`}
             >
               <Trash />
@@ -163,6 +203,35 @@ export function MemoryPanel({ memories, open, onAdd, onDelete }: MemoryPanelProp
           </Box>
         )}
       </MemoryList>
+
+      {/*
+        Editing happens in place rather than in a modal: a memory is one
+        sentence, and a dialog for one line of text is heavier than the thing
+        it edits. The full page has the modal, where there is a category to set
+        as well.
+      */}
+      {editing && (
+        <AddRow
+          onSubmit={(event) => {
+            event.preventDefault();
+            const content = (editing.content ?? '').trim();
+            if (content) onEdit(editing.documentId, { content });
+            setEditing(null);
+          }}
+        >
+          <AddInput
+            aria-label={`Edit memory: ${editing.content}`}
+            autoFocus
+            value={editing.content}
+            onChange={(event) =>
+              setEditing((prev) => (prev ? { ...prev, content: event.target.value } : prev))
+            }
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') setEditing(null);
+            }}
+          />
+        </AddRow>
+      )}
 
       <AddRow
         onSubmit={(event) => {

@@ -26,16 +26,19 @@
     "build": "strapi-plugin build",
     "watch": "strapi-plugin watch",
     "watch:link": "strapi-plugin watch:link",
-    "verify": "strapi-plugin verify && npm run check:seam && npm run test",
+    "verify": "strapi-plugin verify && npm run lint && npm run check:seam && npm run test",
     "test:ts:front": "tsc -p admin/tsconfig.json",
     "test:ts:back": "tsc -p server/tsconfig.json",
     "check:seam": "node scripts/check-seam.mjs",
     "test:e2e": "playwright test",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e:model": "MODEL_TESTS=1 playwright test"
+    "test:e2e:model": "MODEL_TESTS=1 playwright test",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.62.1",
     "@strapi/design-system": "^2.2.4",
     "@strapi/icons": "^2.2.4",
@@ -49,6 +52,11 @@
     "@tanstack/ai-react": "^0.22.4",
     "@types/react": "^18.3.31",
     "@types/react-dom": "^18.3.7",
+    "eslint": "^10.10.0",
+    "eslint-plugin-regexp": "^3.3.0",
+    "eslint-plugin-sonarjs": "^4.2.0",
+    "eslint-plugin-unicorn": "^74.0.0",
+    "globals": "^17.12.0",
     "prettier": "^3.9.6",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -58,6 +66,7 @@
     "remark-gfm": "^4.0.1",
     "styled-components": "^6.5.3",
     "typescript": "^5.9.3",
+    "typescript-eslint": "^8.69.0",
     "vitest": "^3.2.7"
   },
   "peerDependencies": {

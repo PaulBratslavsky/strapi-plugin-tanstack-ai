@@ -43,6 +43,14 @@ export interface ChatConfig {
   enabled: boolean;
   provider: 'anthropic' | 'ollama';
   model: string;
+  /**
+   * The model's context window, when it cannot be detected.
+   *
+   * Ollama is asked directly (`/api/show`) and Anthropic's are published, so
+   * this is only needed for a provider or model neither route covers — and to
+   * override a detected value that is wrong.
+   */
+  contextWindow?: number;
   /** Anthropic only. */
   apiKey?: string;
   /** Ollama only. */

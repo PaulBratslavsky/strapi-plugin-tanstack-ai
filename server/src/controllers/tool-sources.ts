@@ -59,12 +59,21 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
     });
 
     for (const source of discoverContributedTools(strapi)) {
+      // Filtered by the SAME action the chat gate uses, so the menu shows what
+      // the caller can actually reach. Without this the picker offers a toggle
+      // that appears to do nothing: switching it on changes a preference, and
+      // the permission check then withholds the tool anyway.
+      const permitted = source.tools.filter(
+        ({ actionId }) => !ability || ability.can(actionId),
+      );
+      if (permitted.length === 0) continue;
+
       sources.push({
         id: source.id,
         label: source.label,
         description: source.description,
         toggleable: true,
-        tools: source.tools.map(({ namespacedName, tool }) => ({
+        tools: permitted.map(({ namespacedName, tool }) => ({
           name: namespacedName,
           description: tool.description,
         })),

@@ -11,8 +11,6 @@ import { test, expect, type Page } from '@playwright/test';
  * one. Only the built admin bundle knows which id it compiled in.
  */
 
-const EMAIL = process.env.STRAPI_ADMIN_EMAIL ?? 'paul.bratslavsky@strapi.io';
-const PASSWORD = process.env.STRAPI_ADMIN_PASSWORD ?? 'Monkey1234!';
 
 /**
  * Fail on errors the PLUGIN caused.

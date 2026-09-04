@@ -1,6 +1,8 @@
 import { Box, Typography } from '@strapi/design-system';
 import { Plus, Trash } from '@strapi/icons';
+import { Link } from 'react-router-dom';
 import styled from 'styled-components';
+import { PLUGIN_ID } from '../pluginId';
 import type { ConversationSummary } from '../utils/conversations-api';
 
 /**
@@ -50,6 +52,19 @@ const NewChatButton = styled.button`
   svg {
     width: 16px;
     height: 16px;
+  }
+`;
+
+/** To the full page, for when the sidebar is too small to search in. */
+const ManageLink = styled(Link)`
+  display: block;
+  padding: 0 12px 8px;
+  font-size: 11px;
+  color: ${({ theme }) => theme.colors.primary600};
+  text-decoration: none;
+
+  &:hover {
+    text-decoration: underline;
   }
 `;
 
@@ -158,6 +173,8 @@ export function ConversationSidebar({
           New Chat
         </NewChatButton>
       </Box>
+
+      <ManageLink to={`/plugins/${PLUGIN_ID}/history`}>Manage history</ManageLink>
 
       <ConversationList>
         {conversations.map((conversation) => (

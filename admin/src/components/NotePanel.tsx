@@ -12,7 +12,9 @@ import {
   Typography,
 } from '@strapi/design-system';
 import { Trash } from '@strapi/icons';
+import { Link } from 'react-router-dom';
 import styled from 'styled-components';
+import { PLUGIN_ID } from '../pluginId';
 import type { Note, NoteInput } from '../utils/notes-api';
 
 /**
@@ -47,8 +49,24 @@ const PanelRoot = styled.div<{ $open: boolean }>`
 `;
 
 const PanelHeader = styled.div`
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
   padding: 12px 16px;
   border-bottom: 1px solid ${({ theme }) => theme.colors.neutral200};
+`;
+
+/** To the full page, for when the panel is too small to manage in. */
+const ManageLink = styled(Link)`
+  font-size: 11px;
+  color: ${({ theme }) => theme.colors.primary600};
+  text-decoration: none;
+  white-space: nowrap;
+
+  &:hover {
+    text-decoration: underline;
+  }
 `;
 
 const NoteList = styled.div`
@@ -252,6 +270,7 @@ export function NotePanel({ notes, open, onEdit, onDelete }: NotePanelProps) {
         <Typography variant="sigma" textColor="neutral600">
           NOTES ({notes.length})
         </Typography>
+        <ManageLink to={`/plugins/${PLUGIN_ID}/notes`}>Manage</ManageLink>
       </PanelHeader>
 
       <NoteList>

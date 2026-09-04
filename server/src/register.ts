@@ -1,5 +1,6 @@
 import type { Core } from '@strapi/strapi';
 import { actionDefinitionForTool, actionForTool, PLUGIN_NAME } from './lib/tool-permissions';
+import { warnIfNothingGranted } from './lib/permission-advisory';
 import { toolNames } from './tools';
 
 /**
@@ -10,37 +11,6 @@ import { toolNames } from './tools';
  * name would orphan every existing grant the moment the prefix changed.
  */
 const TOOL_NAMES = toolNames();
-
-/**
- * Warn when an action exists but nothing has been granted it.
- *
- * This is the single most confusing failure in this whole subsystem: a tool
- * registers successfully, reports itself registered, and then never appears in
- * `tools/list` — because Strapi enables a capability per session only if the
- * caller's ability satisfies its policy, and an ungranted action satisfies
- * nothing. There is no error on either side. Advisory only: never throw, since
- * a fresh install legitimately has nothing granted yet.
- */
-async function warnIfNothingGranted(strapi: Core.Strapi, actions: string[]): Promise<void> {
-  try {
-    const granted = await strapi.db.query('admin::permission').count({
-      where: { action: { $in: actions } },
-    });
-    if (granted === 0) {
-      strapi.log.warn(
-        `[${PLUGIN_NAME}] none of this plugin's ${actions.length} tool permission(s) are granted ` +
-          'to any role or admin token, so its MCP tools will not appear in tools/list. ' +
-          'Grant them in Settings → Roles, or on the admin API token used by your MCP client.',
-      );
-    }
-  } catch (error) {
-    // An advisory check must never affect boot.
-    strapi.log.debug(
-      `[${PLUGIN_NAME}] could not check whether tool permissions are granted: ` +
-        (error instanceof Error ? error.message : String(error)),
-    );
-  }
-}
 
 /**
  * Register this plugin's admin permission actions.

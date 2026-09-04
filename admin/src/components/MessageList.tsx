@@ -303,7 +303,7 @@ function autoLinkContentTypeUids(text: string): string {
     .map((segment, index) => {
       if (index % 2 === 0) {
         // Ordinary prose: link bare UIDs.
-        return segment.replace(CONTENT_TYPE_UID_RE, (uid) => uidLink(uid, uid));
+        return segment.replaceAll(CONTENT_TYPE_UID_RE, (uid) => uidLink(uid, uid));
       }
       // A protected region. Only one kind is worth touching: a code span that
       // is precisely a UID, which becomes linked code rather than being left

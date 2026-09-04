@@ -47,6 +47,9 @@ export async function loadAI(): Promise<typeof import('@tanstack/ai')> {
       '[tanstack-ai] chat is enabled but @tanstack/ai could not be loaded. ' +
         'It is an optional peer dependency, so install it in the host app: ' +
         `npm install @tanstack/ai. Original error: ${detail}`,
+      // Keeps the module-resolution stack, which names the file that actually
+      // failed to load.
+      { cause: error },
     );
   }
 }
@@ -99,6 +102,7 @@ async function importOrExplain<T extends string>(specifier: T) {
       `[tanstack-ai] chat is enabled but ${specifier} could not be loaded. ` +
         `It is an optional peer dependency, so install it in the host app: ` +
         `npm install ${specifier}. Original error: ${detail}`,
+      { cause: error },
     );
   }
 }

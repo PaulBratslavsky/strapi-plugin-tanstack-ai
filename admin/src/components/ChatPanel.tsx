@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import * as tanstackAiReact from '@tanstack/ai-react';
-import { Badge, Box, Typography } from '@strapi/design-system';
+import { Box, Typography } from '@strapi/design-system';
 import styled from 'styled-components';
 import { PLUGIN_ID } from '../pluginId';
 import { authHeaders, backendURL } from '../utils/auth';
-import type { Message } from '../hooks/chat-messages';
+import { messageReasoningText, messageText, type Message } from '../hooks/chat-messages';
 import { useConversations } from '../hooks/useConversations';
 import { useMemories } from '../hooks/useMemories';
 import { useNotes } from '../hooks/useNotes';
@@ -13,6 +13,14 @@ import { ConversationSidebar } from './ConversationSidebar';
 import { MemoryPanel } from './MemoryPanel';
 import { NotePanel } from './NotePanel';
 import { ToolSourcePicker } from './ToolSourcePicker';
+import { ContextBadge, LocalMarker, ModelBadge, useModelInfo } from './ContextBadge';
+import {
+  HistoryIcon,
+  MemoryIcon,
+  NewChatIcon,
+  NoteIcon,
+  TopBarIcon,
+} from './TopBarIcon';
 import { MessageList } from './MessageList';
 import { ChatInput } from './ChatInput';
 
@@ -53,8 +61,22 @@ const { useChat, fetchServerSentEvents } = tanstackAiReact;
 const ChatLayout = styled.div`
   display: flex;
   flex-direction: row;
-  height: calc(100vh - 320px);
-  min-height: 400px;
+  /*
+   * Fills whatever the page has left, rather than a calc() against 100vh.
+   *
+   * The old value subtracted a hardcoded 320px — a guess at the height of the
+   * heading above it, and a wrong one, hence the dead strip under the
+   * composer. It would have been wrong again at any other zoom level, font
+   * size or heading length. The page is a flex column now, so this just takes
+   * the remainder.
+   *
+   * min-height: 0 is the part that is easy to omit and breaks it: a flex child
+   * defaults to min-height auto, which refuses to shrink below its content, so
+   * the transcript would push the composer off the bottom instead of
+   * scrolling.
+   */
+  flex: 1;
+  min-height: 0;
   border-radius: 4px;
   overflow: hidden;
   box-shadow: ${({ theme }) => theme.shadows.tableShadow};
@@ -77,52 +99,24 @@ const ChatTopBar = styled.div`
 `;
 
 /**
- * The hint gives up its space before the controls do.
+ * Pushes what follows to the right-hand end of the bar.
  *
- * With the sidebar and both panels open, the chat column is narrow enough that
- * flex would otherwise wrap this sentence into a four-line column and shove
- * the buttons around. It truncates instead — the controls are what the bar is
- * for.
+ * This used to hold a sentence explaining what to ask. The transcript's empty
+ * state says the same thing with more room, and in the bar it crowded the
+ * controls — so the space it was taking is all that remains of it.
  */
-const TopBarHint = styled.div`
+const TopBarSpacer = styled.div`
   flex: 1 1 auto;
   min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
 `;
 
-const TopBarButton = styled.button`
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 32px;
-  padding: 0 12px;
-  border: 1px solid ${({ theme }) => theme.colors.neutral200};
-  border-radius: 4px;
-  background: ${({ theme }) => theme.colors.neutral0};
-  color: ${({ theme }) => theme.colors.neutral600};
-  font-size: 12px;
-  cursor: pointer;
-  flex-shrink: 0;
-
-  &:hover:not(:disabled) {
-    background: ${({ theme }) => theme.colors.neutral100};
-    color: ${({ theme }) => theme.colors.primary600};
-    border-color: ${({ theme }) => theme.colors.primary600};
-  }
-
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-`;
 
 export function ChatPanel() {
   const [input, setInput] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [memoryPanelOpen, setMemoryPanelOpen] = useState(false);
   const [notePanelOpen, setNotePanelOpen] = useState(false);
+  const modelInfo = useModelInfo();
   // Reported by the stream itself rather than fetched separately: the answer
   // knows which model produced it, so there is no second source to fall out of
   // step with the first.
@@ -147,6 +141,7 @@ export function ChatPanel() {
     memories,
     error: memoryError,
     addMemory,
+    editMemory,
     removeMemory,
     refresh: refreshMemories,
   } = useMemories();
@@ -202,7 +197,7 @@ export function ChatPanel() {
   // exists until it asks, so without this the panel only catches up on a
   // reload — and a user watching it would conclude the tool had not run.
   useEffect(() => {
-    if (wasLoadingRef.current && !isLoading && messages.length > 0) {
+    if (!isLoading && wasLoadingRef.current && messages.length > 0) {
       void saveMessages(messages as unknown as Message[]);
       void refreshMemories();
       void refreshNotes();
@@ -221,6 +216,29 @@ export function ChatPanel() {
     void sendMessage(text);
   };
 
+  /*
+   * One line for whatever went wrong. A streaming error wins: it is about the
+   * turn the user is watching, where the others are about a side panel.
+   */
+  /*
+   * What the transcript adds on top of the preamble.
+   *
+   * Estimated the same way the server estimates the preamble — four characters
+   * per token — so the two halves of the badge are at least consistent with
+   * each other. Reasoning text counts: it was generated, and on a local model
+   * it is often most of the turn.
+   */
+  const conversationTokens = useMemo(() => {
+    const text = (messages as unknown as Message[])
+      .map((message) => messageText(message) + messageReasoningText(message))
+      .join('');
+    return Math.ceil(text.length / 4);
+  }, [messages]);
+
+  const streamDetail = error instanceof Error ? error.message : String(error);
+  const streamError = error ? `Error: ${streamDetail}` : null;
+  const problem = streamError ?? historyError ?? memoryError ?? noteError ?? sourceError;
+
   return (
     <ChatLayout>
       <ConversationSidebar
@@ -236,38 +254,36 @@ export function ChatPanel() {
       />
       <ChatColumn>
         <ChatTopBar>
-          <TopBarButton
-            type="button"
+          <TopBarIcon
+            label={sidebarOpen ? 'Hide history' : 'History'}
+            active={sidebarOpen}
+            expanded={sidebarOpen}
             onClick={() => setSidebarOpen((open) => !open)}
-            aria-expanded={sidebarOpen}
           >
-            {sidebarOpen ? 'Hide history' : 'History'}
-          </TopBarButton>
-          {model ? (
-            <Badge>{model}</Badge>
-          ) : null}
+            <HistoryIcon />
+          </TopBarIcon>
           <ToolSourcePicker sources={sources} enabled={enabledSources} onToggle={toggleSource} />
-          <TopBarHint>
-            {!model && (
-              <Typography variant="pi" textColor="neutral600">
-                Ask about your content types or search across all of them.
-              </Typography>
-            )}
-          </TopBarHint>
-          <TopBarButton
-            type="button"
+          {/* Model, then what it is costing, then where it runs. */}
+          <ModelBadge name={model ?? modelInfo?.model ?? null} />
+          <ContextBadge conversationTokens={conversationTokens} />
+          <LocalMarker isLocal={modelInfo?.isLocal ?? false} />
+          <TopBarSpacer />
+          <TopBarIcon
+            label={`Memories (${memories.length})`}
+            active={memoryPanelOpen}
+            expanded={memoryPanelOpen}
             onClick={() => setMemoryPanelOpen((open) => !open)}
-            aria-expanded={memoryPanelOpen}
           >
-            Memories ({memories.length})
-          </TopBarButton>
-          <TopBarButton
-            type="button"
+            <MemoryIcon />
+          </TopBarIcon>
+          <TopBarIcon
+            label={`Notes (${notes.length})`}
+            active={notePanelOpen}
+            expanded={notePanelOpen}
             onClick={() => setNotePanelOpen((open) => !open)}
-            aria-expanded={notePanelOpen}
           >
-            Notes ({notes.length})
-          </TopBarButton>
+            <NoteIcon />
+          </TopBarIcon>
           {/*
           "New chat" rather than "Clear": the transcript is persisted now, so
           emptying the panel starts a new conversation instead of destroying
@@ -275,16 +291,16 @@ export function ChatPanel() {
           the row it had been saving to, and the next reply would append to a
           conversation the user believed they had discarded.
         */}
-          <TopBarButton
-            type="button"
+          <TopBarIcon
+            label="New chat"
+            disabled={messages.length === 0 || isLoading}
             onClick={() => {
               startNewConversation();
               clear();
             }}
-            disabled={messages.length === 0 || isLoading}
           >
-            New chat
-          </TopBarButton>
+            <NewChatIcon />
+          </TopBarIcon>
         </ChatTopBar>
 
         <MessageList
@@ -293,13 +309,9 @@ export function ChatPanel() {
           isLoading={isLoading}
         />
 
-        {(error || historyError || memoryError || noteError || sourceError) && (
+        {problem && (
           <Box padding={3} background="danger100" marginLeft={4} marginRight={4}>
-            <Typography textColor="danger600">
-              {error
-                ? `Error: ${error instanceof Error ? error.message : String(error)}`
-                : (historyError ?? memoryError ?? noteError ?? sourceError)}
-            </Typography>
+            <Typography textColor="danger600">{problem}</Typography>
           </Box>
         )}
 
@@ -315,6 +327,7 @@ export function ChatPanel() {
         memories={memories}
         open={memoryPanelOpen}
         onAdd={addMemory}
+        onEdit={editMemory}
         onDelete={removeMemory}
       />
       <NotePanel notes={notes} open={notePanelOpen} onEdit={editNote} onDelete={removeNote} />

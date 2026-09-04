@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Typography } from '@strapi/design-system';
 import styled from 'styled-components';
 import type { ToolSource } from '../utils/tool-sources-api';
+import { ToolsIcon, TopBarIcon } from './TopBarIcon';
 
 /**
  * What tools the model has, and which plugin each one came from.
@@ -23,25 +24,6 @@ const Wrapper = styled.div`
   flex-shrink: 0;
 `;
 
-const TriggerButton = styled.button`
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  height: 32px;
-  padding: 0 12px;
-  border: 1px solid ${({ theme }) => theme.colors.neutral200};
-  border-radius: 4px;
-  background: ${({ theme }) => theme.colors.neutral0};
-  color: ${({ theme }) => theme.colors.neutral600};
-  font-size: 12px;
-  cursor: pointer;
-
-  &:hover {
-    background: ${({ theme }) => theme.colors.neutral100};
-    color: ${({ theme }) => theme.colors.primary600};
-    border-color: ${({ theme }) => theme.colors.primary600};
-  }
-`;
 
 const Popover = styled.div`
   position: absolute;
@@ -103,7 +85,7 @@ export function ToolSourcePicker({ sources, enabled, onToggle }: ToolSourcePicke
   // Close on an outside click or Escape. Without the key handler the menu is a
   // trap for anyone not using a mouse.
   useEffect(() => {
-    if (!open) return undefined;
+    if (!open) return;
     const onPointerDown = (event: MouseEvent) => {
       if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) setOpen(false);
     };
@@ -160,14 +142,14 @@ export function ToolSourcePicker({ sources, enabled, onToggle }: ToolSourcePicke
 
   return (
     <Wrapper ref={wrapperRef}>
-      <TriggerButton
-        type="button"
+      <TopBarIcon
+        label={`Tools (${activeCount})`}
+        active={open}
+        expanded={open}
         onClick={() => setOpen((value) => !value)}
-        aria-expanded={open}
-        aria-haspopup="true"
       >
-        Tools ({activeCount})
-      </TriggerButton>
+        <ToolsIcon />
+      </TopBarIcon>
       {open && (
         <Popover role="dialog" aria-label="Tool sources">
           {fixed.length > 0 && (
@@ -177,7 +159,7 @@ export function ToolSourcePicker({ sources, enabled, onToggle }: ToolSourcePicke
                   ALWAYS ON
                 </Typography>
               </GroupHeader>
-              {fixed.map(renderSource)}
+              {fixed.map((source) => renderSource(source))}
             </>
           )}
           {contributed.length > 0 && (
@@ -187,7 +169,7 @@ export function ToolSourcePicker({ sources, enabled, onToggle }: ToolSourcePicke
                   FROM OTHER PLUGINS
                 </Typography>
               </GroupHeader>
-              {contributed.map(renderSource)}
+              {contributed.map((source) => renderSource(source))}
             </>
           )}
         </Popover>

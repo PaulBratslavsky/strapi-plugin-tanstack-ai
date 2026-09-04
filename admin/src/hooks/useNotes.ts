@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
+  createNote as createNoteRequest,
   deleteNote,
   fetchNotes,
   updateNote as updateNoteRequest,
@@ -31,6 +32,16 @@ export function useNotes() {
     void load();
   }, [load]);
 
+  const addNote = useCallback(async (data: NoteInput) => {
+    try {
+      const created = await createNoteRequest(data);
+      setNotes((prev) => [created, ...prev]);
+      setError(null);
+    } catch (cause) {
+      setError(`Could not save that note: ${String(cause)}`);
+    }
+  }, []);
+
   const editNote = useCallback(async (documentId: string, data: NoteInput) => {
     try {
       const updated = await updateNoteRequest(documentId, data);
@@ -53,5 +64,5 @@ export function useNotes() {
     }
   }, []);
 
-  return { notes, error, editNote, removeNote, refresh: load };
+  return { notes, error, addNote, editNote, removeNote, refresh: load };
 }

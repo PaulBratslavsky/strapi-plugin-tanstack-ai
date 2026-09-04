@@ -12,7 +12,7 @@ import { actionDefinitionForTool, actionForTool } from '../lib/tool-permissions'
  * Strapi's dist internals, and a test that breaks when Strapi reshuffles its
  * build is a false alarm, not a finding.
  */
-const STRAPI_ACTION_UID = /^[a-z]([a-z|.|-]+)[a-z]$/;
+const STRAPI_ACTION_UID = /^[a-z][a-z|.-]+[a-z]$/;
 
 /** Stand-in for the MCP handler context the schema resolvers are handed. */
 const HANDLER_CONTEXT = {} as never;
@@ -83,7 +83,8 @@ describe.each(ALL_TOOLS.map((tool) => [tool.name, tool] as const))('%s', (name, 
   it('names a subject-less action', () => {
     // A subject-scoped grant fails the subject-less capability check Strapi
     // runs per session — the original bug, kept out with a test.
-    for (const policy of tool.auth?.policies ?? []) {
+    const policies = tool.auth?.policies ?? [];
+    for (const policy of policies) {
       expect(policy).not.toHaveProperty('subject');
     }
   });

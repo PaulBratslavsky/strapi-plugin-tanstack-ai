@@ -4,6 +4,7 @@ import conversation from './conversation';
 import memory from './memory';
 import note from './note';
 import toolSources from './tool-sources';
+import context from './context';
 
 export default {
   controller,
@@ -12,4 +13,5 @@ export default {
   memory,
   note,
   'tool-sources': toolSources,
+  context,
 };

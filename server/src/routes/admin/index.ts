@@ -58,6 +58,11 @@ const chatRoutes = [
   { method: 'PUT', path: '/memories/:id', handler: 'memory.update', config: { policies: [] } },
   { method: 'DELETE', path: '/memories/:id', handler: 'memory.delete', config: { policies: [] } },
 
+  // What the preamble costs this caller, and which model answers. Read-only,
+  // and measured per caller because the tool set is filtered by their role.
+  { method: 'GET', path: '/context-info', handler: 'context.info', config: { policies: [] } },
+  { method: 'GET', path: '/model-info', handler: 'context.model', config: { policies: [] } },
+
   // What tools the chat can reach, and where each comes from. Read-only.
   { method: 'GET', path: '/tool-sources', handler: 'tool-sources.find', config: { policies: [] } },
 

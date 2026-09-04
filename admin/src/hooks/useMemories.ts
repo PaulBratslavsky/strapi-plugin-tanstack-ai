@@ -3,6 +3,7 @@ import {
   createMemory as createMemoryRequest,
   deleteMemory,
   fetchMemories,
+  updateMemory as updateMemoryRequest,
   type Memory,
 } from '../utils/memories-api';
 
@@ -41,6 +42,21 @@ export function useMemories() {
     }
   }, []);
 
+  const editMemory = useCallback(
+    async (documentId: string, data: { content?: string; category?: string }) => {
+      try {
+        const updated = await updateMemoryRequest(documentId, data);
+        setMemories((prev) =>
+          prev.map((memory) => (memory.documentId === documentId ? { ...memory, ...updated } : memory)),
+        );
+        setError(null);
+      } catch (cause) {
+        setError(`Could not update that memory: ${String(cause)}`);
+      }
+    },
+    [],
+  );
+
   const removeMemory = useCallback(async (documentId: string) => {
     try {
       await deleteMemory(documentId);
@@ -51,5 +67,5 @@ export function useMemories() {
     }
   }, []);
 
-  return { memories, error, addMemory, removeMemory, refresh: load };
+  return { memories, error, addMemory, editMemory, removeMemory, refresh: load };
 }
