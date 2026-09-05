@@ -91,8 +91,8 @@ const composerOf = (page: Page) => page.getByRole('textbox', { name: /chat messa
  * token lookup, same headers — rather than reproducing that in the test and
  * quietly testing a different path.
  */
-async function seedNote(page: Page, note: { title: string; content: string }) {
-  const status = await page.evaluate(async (payload) => {
+async function seed(page: Page, path: string, body: Record<string, unknown>) {
+  const status = await page.evaluate(async ({ path: url, payload }) => {
     const stored = localStorage.getItem('jwtToken') ?? sessionStorage.getItem('jwtToken');
     let token = stored;
     if (stored) {
@@ -106,7 +106,7 @@ async function seedNote(page: Page, note: { title: string; content: string }) {
       const match = /(?:^|;\s*)jwtToken=([^;]*)/.exec(document.cookie);
       token = match ? decodeURIComponent(match[1]) : null;
     }
-    const response = await fetch('/tanstack-ai/notes', {
+    const response = await fetch(`/tanstack-ai/${url}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -115,9 +115,12 @@ async function seedNote(page: Page, note: { title: string; content: string }) {
       body: JSON.stringify(payload),
     });
     return response.status;
-  }, note);
-  expect(status, 'seeding a note should succeed').toBe(201);
+  }, { path, payload: body });
+  expect(status, `seeding ${path} should succeed`).toBe(201);
 }
+
+const seedNote = (page: Page, note: { title: string; content: string }) =>
+  seed(page, 'notes', note);
 
 async function sendAndWait(page: Page, text: string) {
   await composerOf(page).fill(text);

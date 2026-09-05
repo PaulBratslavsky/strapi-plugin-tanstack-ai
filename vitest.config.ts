@@ -1,11 +1,15 @@
 import { defineConfig } from 'vitest/config';
 
 /**
- * Unit tests for the SERVER half only.
+ * Unit tests for the server half, and for admin logic that is genuinely pure.
  *
- * The admin half is verified in a browser (`npm run test:e2e`), because what
- * broke there — a plugin-id mismatch, an auth read that missed a cookie — was
- * invisible to anything that did not run the built bundle.
+ * MOST of the admin half is verified in a browser (`npm run test:e2e`), because
+ * what broke there — a plugin-id mismatch, an auth read that missed a cookie,
+ * a Tooltip that could not take a ref — was invisible to anything that did not
+ * run the built bundle. What lives here instead is the arithmetic: rules like
+ * "clamp the page when the list shrinks" are exercised by a specific sequence
+ * of clicks, and reproducing that through a rendered component is more
+ * machinery than the rule deserves.
  */
 export default defineConfig({
   resolve: {
@@ -32,7 +36,7 @@ export default defineConfig({
         inline: [/@strapi\//],
       },
     },
-    include: ['server/src/**/*.test.ts'],
+    include: ['server/src/**/*.test.ts', 'admin/src/**/*.test.ts'],
     environment: 'node',
   },
 });

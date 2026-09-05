@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
+import { paginate } from './paginate';
 
 /**
  * Search and pagination for a store page.
@@ -14,8 +15,6 @@ import { useMemo, useRef, useState } from 'react';
  * chat panel's sidebars. A server round trip per keystroke would be slower and
  * would need an endpoint that does not exist.
  */
-
-const PAGE_SIZE = 10;
 
 export function useStoreList<T>(items: T[], matches: (item: T, query: string) => boolean) {
   const [search, setSearch] = useState('');
@@ -33,28 +32,20 @@ export function useStoreList<T>(items: T[], matches: (item: T, query: string) =>
   const matchRef = useRef(matches);
   matchRef.current = matches;
 
-  const filtered = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    if (!query) return items;
-    return items.filter((item) => matchRef.current(item, query));
-  }, [items, search]);
-
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  // Clamped, because deleting the last row on the last page would otherwise
-  // leave the view on a page that no longer exists, showing nothing.
-  const current = Math.min(page, pageCount);
-  const visible = filtered.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
+  const result = useMemo(
+    () => paginate(items, (item, query) => matchRef.current(item, query), search, page),
+    [items, search, page],
+  );
 
   return {
     search,
     setSearch: (value: string) => {
       setSearch(value);
+      // Back to the first page: page 4 of a search that now has one page would
+      // show nothing, and the reader would conclude the search found nothing.
       setPage(1);
     },
-    page: current,
     setPage,
-    pageCount,
-    visible,
-    total: filtered.length,
+    ...result,
   };
 }

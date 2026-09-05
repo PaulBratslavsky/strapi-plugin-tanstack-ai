@@ -46,8 +46,19 @@ const KNOWN_WINDOWS: Array<[RegExp, number]> = [
   [/^claude-3/, 200_000],
 ];
 
-/** Ask Ollama what it is actually serving. */
-async function askOllama(baseURL: string, model: string): Promise<DetectedWindow | null> {
+/**
+ * Ask Ollama what it is actually serving.
+ *
+ * `fetchImpl` is a parameter so a test can answer without a running Ollama —
+ * the same reason the reference plugin threads one through. Detection has real
+ * branches (served vs trained, malformed URL, timeout, an older Ollama that
+ * reports neither) and none of them are reachable otherwise.
+ */
+async function askOllama(
+  baseURL: string,
+  model: string,
+  fetchImpl: typeof fetch,
+): Promise<DetectedWindow | null> {
   let origin: string;
   try {
     origin = new URL(baseURL).origin;
@@ -59,7 +70,7 @@ async function askOllama(baseURL: string, model: string): Promise<DetectedWindow
   // Short: this runs while someone waits for a badge to appear.
   const timer = setTimeout(() => controller.abort(), 3000);
   try {
-    const response = await fetch(`${origin}/api/show`, {
+    const response = await fetchImpl(`${origin}/api/show`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model }),
@@ -98,14 +109,17 @@ async function askOllama(baseURL: string, model: string): Promise<DetectedWindow
   }
 }
 
-export async function detectContextWindow(config: PluginConfig): Promise<DetectedWindow> {
+export async function detectContextWindow(
+  config: PluginConfig,
+  fetchImpl: typeof fetch = fetch,
+): Promise<DetectedWindow> {
   const configured = config.chat.contextWindow;
   if (typeof configured === 'number' && configured > 0) {
     return { window: configured, source: 'config', trained: null };
   }
 
   if (config.chat.provider === 'ollama' && config.chat.baseURL) {
-    const detected = await askOllama(config.chat.baseURL, config.chat.model);
+    const detected = await askOllama(config.chat.baseURL, config.chat.model, fetchImpl);
     if (detected) return detected;
   }
 

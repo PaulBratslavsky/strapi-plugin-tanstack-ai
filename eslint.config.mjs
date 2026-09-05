@@ -108,6 +108,22 @@ export default tseslint.config(
     rules: {
       'sonarjs/no-duplicate-string': 'off',
       '@typescript-eslint/no-explicit-any': 'off',
+      // A test may repeat a string to say something plainly.
+      'unicorn/prefer-string-repeat': 'off',
+      // A one-line predicate reads better beside the case that uses it.
+      'unicorn/consistent-function-scoping': 'off',
     },
+  },
+
+  {
+    /*
+     * `page.evaluate` callbacks run in the BROWSER, where `document`,
+     * `fetch` and `localStorage` all exist. The rule cannot know Playwright
+     * serialises the function across that boundary, so it reports every one of
+     * them as using an undefined variable. Off here only — the isolation it
+     * describes is real everywhere else.
+     */
+    files: ['e2e/**/*.ts'],
+    rules: { 'unicorn/isolated-functions': 'off' },
   },
 );
