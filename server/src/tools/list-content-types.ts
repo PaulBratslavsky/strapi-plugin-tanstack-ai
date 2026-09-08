@@ -101,7 +101,8 @@ function summarize(ct: { uid: string; kind?: string; info?: { displayName?: stri
   const relations: Relation[] = [];
   const components = new Set<string>();
 
-  for (const [name, attr] of Object.entries(ct.attributes ?? {})) {
+  const attributes = Object.entries(ct.attributes ?? {});
+  for (const [name, attr] of attributes) {
     if (attr.type === 'relation' && typeof attr.target === 'string') {
       relations.push({ field: name, kind: String(attr.relation ?? 'unknown'), target: attr.target });
       continue;
@@ -184,7 +185,7 @@ export const listContentTypes = ai.mcp.defineTool({
       };
     }
 
-    const contentTypes = selected.map(summarize);
+    const contentTypes = selected.map((contentType) => summarize(contentType));
     const result = { contentTypes, count: contentTypes.length };
 
     // Both shapes are required: `content` is what a client without structured

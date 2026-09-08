@@ -165,12 +165,17 @@ export function measureTools(tools: unknown[]): { tokens: number; count: number 
 }
 
 /** Never let a badge's measurement break a boot or a request. */
-export function safeDetect(strapi: Core.Strapi, config: PluginConfig): Promise<DetectedWindow> {
-  return detectContextWindow(config).catch((error) => {
+export async function safeDetect(
+  strapi: Core.Strapi,
+  config: PluginConfig,
+): Promise<DetectedWindow> {
+  try {
+    return await detectContextWindow(config);
+  } catch (error) {
     strapi.log.debug(
       '[tanstack-ai] could not detect the context window: ' +
         (error instanceof Error ? error.message : String(error)),
     );
-    return { window: null, source: 'unknown' as const, trained: null };
-  });
+    return { window: null, source: 'unknown', trained: null };
+  }
 }

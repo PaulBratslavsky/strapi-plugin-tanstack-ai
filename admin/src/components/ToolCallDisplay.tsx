@@ -36,48 +36,61 @@ const MAX_CHIPS = 5;
  * is scoped to one type. `search_content` here can fan out across types, so
  * every result row carries its own `contentType` and the link is built per row.
  */
+/** What to call a search result, in the order a person would recognise it. */
+function rowLabel(row: Record<string, unknown>, contentType: string): string {
+  const data = (row.data ?? {}) as Record<string, unknown>;
+  const candidate =
+    (data.title as string) ||
+    (data.name as string) ||
+    (data.slug as string) ||
+    (row.documentId as string) ||
+    contentType;
+  return String(candidate);
+}
+
+/** Chips for a cross-type search: one per row, de-duplicated by destination. */
+function searchLinks(output: Record<string, unknown>): ContentLink[] {
+  const results = output.results as Array<Record<string, unknown>> | undefined;
+  if (!Array.isArray(results)) return [];
+
+  const links: ContentLink[] = [];
+  const seen = new Set<string>();
+
+  for (const row of results.slice(0, MAX_CHIPS)) {
+    const contentType = row.contentType as string | undefined;
+    if (!contentType) continue;
+
+    const to = contentManagerUrl(contentType, row.documentId as string | undefined);
+    if (seen.has(to)) continue;
+
+    seen.add(to);
+    links.push({ label: rowLabel(row, contentType), to });
+  }
+
+  return links;
+}
+
+/** Chips for a schema listing: one per collection type. */
+function contentTypeLinks(output: Record<string, unknown>): ContentLink[] {
+  const types = output.contentTypes as Array<Record<string, unknown>> | undefined;
+  if (!Array.isArray(types)) return [];
+
+  return types
+    .slice(0, MAX_CHIPS)
+    .map((type) => type.uid as string | undefined)
+    .filter((uid): uid is string => typeof uid === 'string')
+    // Only collection types have a Content Manager list view; a single type
+    // 404s on this route, so linking one would be a broken chip.
+    .filter((uid) => uid.startsWith('api::'))
+    .map((uid) => ({ label: uid, to: contentManagerUrl(uid) }));
+}
+
 function extractContentLinks(toolCall: ToolCall): ContentLink[] {
-  if (toolCall.output === undefined) return [];
   const output = toolCall.output as Record<string, unknown> | undefined;
   if (!output || typeof output !== 'object') return [];
 
-  if (toolCall.toolName === 'search_content') {
-    const results = output.results as Array<Record<string, unknown>> | undefined;
-    if (!Array.isArray(results)) return [];
-
-    const links: ContentLink[] = [];
-    const seen = new Set<string>();
-    for (const row of results.slice(0, MAX_CHIPS)) {
-      const contentType = row.contentType as string | undefined;
-      if (!contentType) continue;
-      const data = (row.data ?? {}) as Record<string, unknown>;
-      const title =
-        (data.title as string) ||
-        (data.name as string) ||
-        (data.slug as string) ||
-        (row.documentId as string) ||
-        contentType;
-      const to = contentManagerUrl(contentType, row.documentId as string | undefined);
-      if (seen.has(to)) continue;
-      seen.add(to);
-      links.push({ label: String(title), to });
-    }
-    return links;
-  }
-
-  if (toolCall.toolName === 'list_content_types') {
-    const types = output.contentTypes as Array<Record<string, unknown>> | undefined;
-    if (!Array.isArray(types)) return [];
-    return types
-      .slice(0, MAX_CHIPS)
-      .map((type) => type.uid as string | undefined)
-      .filter((uid): uid is string => typeof uid === 'string')
-      // Only collection types have a Content Manager list view; a single type
-      // 404s on this route, so linking one would be a broken chip.
-      .filter((uid) => uid.startsWith('api::'))
-      .map((uid) => ({ label: uid, to: contentManagerUrl(uid) }));
-  }
-
+  if (toolCall.toolName === 'search_content') return searchLinks(output);
+  if (toolCall.toolName === 'list_content_types') return contentTypeLinks(output);
   return [];
 }
 

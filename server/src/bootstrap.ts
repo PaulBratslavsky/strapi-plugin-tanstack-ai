@@ -16,7 +16,11 @@ const bootstrap = ({ strapi }: { strapi: Core.Strapi }) => {
   // The MCP server is optional in the host: `mcp.enabled` may be false in
   // config/server.ts, or the Strapi version may predate it. Tools simply have
   // nowhere to go then, which is not an error worth crashing a boot over.
-  const mcp = (strapi as any).ai?.mcp;
+  // `strapi.ai` is absent from Core.Strapi on versions before 5.47, which is
+  // exactly the case this guard exists for — so the shape is named here rather
+  // than asserted as `any`.
+  const mcp = (strapi as Core.Strapi & { ai?: { mcp?: { registerTool: (tool: unknown) => void } } })
+    .ai?.mcp;
   if (!mcp) {
     strapi.log.info(
       '[tanstack-ai] Strapi MCP server not available — no tools registered. ' +

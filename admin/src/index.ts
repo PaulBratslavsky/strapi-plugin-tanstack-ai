@@ -66,8 +66,8 @@ const plugin: StrapiApp['appPlugins'][string] = {
           };
 
           const newData: Record<string, string> = {};
-          for (const key of Object.keys(data)) {
-            newData[getTranslation(key)] = data[key];
+          for (const [key, value] of Object.entries(data)) {
+            newData[getTranslation(key)] = value;
           }
 
           return { data: newData, locale };

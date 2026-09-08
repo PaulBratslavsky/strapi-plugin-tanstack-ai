@@ -39,6 +39,14 @@ export default tseslint.config(
        * change to a plugin's "recommended" set cannot quietly drop one.
        */
       'sonarjs/cognitive-complexity': ['error', 15],
+
+      // An underscore prefix is how this codebase says "required by the
+      // signature, unused here" — Strapi hands every lifecycle a context
+      // object whether or not the hook needs it.
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+      ],
       'unicorn/prefer-string-replace-all': 'error',
       'regexp/no-dupe-characters-character-class': 'error',
       'unicorn/no-nested-ternary': 'error',
@@ -124,6 +132,34 @@ export default tseslint.config(
      * describes is real everywhere else.
      */
     files: ['e2e/**/*.ts'],
-    rules: { 'unicorn/isolated-functions': 'off' },
+    rules: {
+      'unicorn/isolated-functions': 'off',
+      // A spec file IS top-level calls: `test(...)` at module scope is the
+      // only way to declare one.
+      'unicorn/no-top-level-side-effects': 'off',
+      // `(await request).postData()` reads fine and naming the intermediate
+      // adds a line that says nothing.
+      'unicorn/no-await-expression-member': 'off',
+      // The local dev admin's password, already env-overridable, reaching
+      // nothing but a Strapi on localhost. Keeping it here is what makes the
+      // suite runnable on a fresh clone.
+      'sonarjs/no-hardcoded-passwords': 'off',
+      // `setup(...)` is a test declaration, not a skipped test.
+      'sonarjs/explicit-test-skip': 'off',
+    },
+  },
+
+  {
+    /*
+     * Build-time CLI scripts. They read this repo's own output, never
+     * untrusted input, and their whole job is to exit non-zero when a check
+     * fails — which is what `no-process-exit` forbids.
+     */
+    files: ['scripts/**/*.mjs'],
+    rules: {
+      'unicorn/no-process-exit': 'off',
+      'sonarjs/super-linear-regex': 'off',
+      'unicorn/prefer-iterator-to-array': 'off',
+    },
   },
 );

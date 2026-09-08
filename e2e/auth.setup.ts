@@ -22,7 +22,7 @@ import { test as setup, expect } from '@playwright/test';
  */
 
 const EMAIL = process.env.STRAPI_ADMIN_EMAIL ?? 'paul.bratslavsky@strapi.io';
-// eslint-disable-next-line sonarjs/no-hardcoded-passwords -- the local dev
+ 
 // admin's password, overridable by env. It reaches nothing but a Strapi on
 // localhost, and putting it here rather than in a .env keeps the suite
 // runnable on a fresh clone.

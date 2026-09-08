@@ -79,7 +79,7 @@ export interface DiscoveredSource {
 }
 
 /** Tool names may only contain [a-zA-Z0-9_-]; plugin ids may contain more. */
-const safeSourceId = (pluginName: string): string => pluginName.replaceAll(/[^a-zA-Z0-9_-]/g, '_');
+const safeSourceId = (pluginName: string): string => pluginName.replaceAll(/[^\w-]/g, '_');
 
 /**
  * Has the owning plugin actually registered this action?
@@ -247,7 +247,8 @@ export function discoverContributedTools(strapi: Core.Strapi): DiscoveredSource[
   const sources: DiscoveredSource[] = [];
   const seen = new Set<string>();
 
-  for (const pluginName of Object.keys(strapi.plugins ?? {})) {
+  const pluginNames = Object.keys(strapi.plugins ?? {});
+  for (const pluginName of pluginNames) {
     if (pluginName === PLUGIN_NAME) continue;
 
     // Per plugin, so one contributor cannot cost the others their tools.
@@ -263,6 +264,32 @@ export function discoverContributedTools(strapi: Core.Strapi): DiscoveredSource[
   }
 
   return sources;
+}
+
+/** One contributed tool, wrapped as a TanStack AI tool. */
+function buildTool(
+  strapi: Core.Strapi,
+  toolDefinition: Awaited<ReturnType<typeof loadAI>>['toolDefinition'],
+  sourceLabel: string,
+  namespacedName: string,
+  tool: ContributedTool,
+) {
+  const definition = toolDefinition({
+    name: namespacedName,
+    // The source is named in the description so the model can attribute an
+    // answer to it, and so two similarly-named tools are distinguishable.
+    description: `[${sourceLabel}] ${tool.description}`,
+    inputSchema: tool.schema as never,
+  });
+
+  const handler = (async (args: unknown) => {
+    // The contributed contract passes `strapi` explicitly and a context object
+    // third — matching the reference, so a plugin written for it runs here
+    // unchanged.
+    return tool.execute(args, strapi, {});
+  }) as never;
+
+  return definition.server(handler);
 }
 
 /**
@@ -284,37 +311,23 @@ export async function buildContributedTools(
   for (const source of discoverContributedTools(strapi)) {
     if (enabled && !enabled.includes(source.id)) continue;
 
-    for (const { namespacedName, tool, actionId } of source.tools) {
-      /*
-       * TWO INDEPENDENT AXES, and both must pass.
-       *
-       * `enabledToolSources` above is a PREFERENCE — a per-person browser
-       * toggle for keeping the tool list focused. This is PERMISSION, and it
-       * is the same check that gates this plugin's own tools, just reading the
-       * contributing plugin's grant instead of ours. A source switched on by
-       * someone whose role lacks the grant still gets nothing.
-       */
-      if (ability && !ability.can(actionId)) {
-        strapi.log.debug(`[tanstack-ai] withholding ${namespacedName} — caller lacks ${actionId}`);
-        continue;
-      }
+    /*
+     * TWO INDEPENDENT AXES, and both must pass.
+     *
+     * `enabledToolSources` above is a PREFERENCE — a per-person browser toggle
+     * for keeping the tool list focused. The filter below is PERMISSION, and
+     * it is the same check that gates this plugin's own tools, just reading
+     * the contributing plugin's grant instead of ours. A source switched on by
+     * someone whose role lacks the grant still gets nothing.
+     */
+    const permitted = source.tools.filter(({ namespacedName, actionId }) => {
+      if (!ability || ability.can(actionId)) return true;
+      strapi.log.debug(`[tanstack-ai] withholding ${namespacedName} — caller lacks ${actionId}`);
+      return false;
+    });
 
-      const definition = toolDefinition({
-        name: namespacedName,
-        // The source is named in the description so the model can attribute an
-        // answer to it, and so two similarly-named tools are distinguishable.
-        description: `[${source.label}] ${tool.description}`,
-        inputSchema: tool.schema as never,
-      });
-
-      const handler = (async (args: unknown) => {
-        // The contributed contract passes `strapi` explicitly and a context
-        // object third — matching the reference, so a plugin written for it
-        // runs here unchanged.
-        return tool.execute(args, strapi, {});
-      }) as never;
-
-      tools.push(definition.server(handler));
+    for (const { namespacedName, tool } of permitted) {
+      tools.push(buildTool(strapi, toolDefinition, source.label, namespacedName, tool));
     }
   }
 

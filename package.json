@@ -1,6 +1,18 @@
 {
   "version": "0.2.0",
-  "keywords": [],
+  "keywords": [
+    "strapi",
+    "strapi-plugin",
+    "tanstack",
+    "tanstack-ai",
+    "ai",
+    "chat",
+    "mcp",
+    "model-context-protocol",
+    "llm",
+    "ollama",
+    "anthropic"
+  ],
   "type": "commonjs",
   "exports": {
     "./package.json": "./package.json",
@@ -35,7 +47,8 @@
     "test:watch": "vitest",
     "test:e2e:model": "MODEL_TESTS=1 playwright test",
     "lint": "eslint .",
-    "lint:fix": "eslint . --fix"
+    "lint:fix": "eslint . --fix",
+    "prepublishOnly": "npm run verify && npm run build"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -111,5 +124,16 @@
   "dependencies": {
     "react-markdown": "^9.0.0",
     "remark-gfm": "^4.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/PaulBratslavsky/strapi-plugin-tanstack-ai.git"
+  },
+  "homepage": "https://github.com/PaulBratslavsky/strapi-plugin-tanstack-ai#readme",
+  "bugs": {
+    "url": "https://github.com/PaulBratslavsky/strapi-plugin-tanstack-ai/issues"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

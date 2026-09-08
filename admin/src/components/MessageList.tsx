@@ -12,6 +12,7 @@ import {
   type Message,
 } from '../hooks/chat-messages';
 import { ToolCallDisplay, HIDDEN_TOOLS } from './ToolCallDisplay';
+import { autoLinkContentTypeUids } from '../lib/auto-link';
 
 /**
  * The transcript.
@@ -264,55 +265,6 @@ const EmptyState = styled.div`
   flex: 1;
   color: ${({ theme }) => theme.colors.neutral400};
 `;
-
-/**
- * Turn content-type UIDs in an answer into Content Manager links.
- *
- * The model names types as `api::product.product` because that is what the
- * tools return. Left as text it is a string the operator has to go and look up.
- *
- * FIXES A BUG INHERITED FROM THE REFERENCE, which runs this regex over the
- * whole answer. Models routinely write the UID in backticks, and rewriting it
- * there produces `[api::product.product](/content-manager/...)` INSIDE a code
- * span — where markdown is not parsed, so the reader sees the raw link syntax.
- * That is exactly how it rendered here.
- *
- * So: fenced blocks and existing links are left alone, a code span holding
- * just a UID becomes a link AROUND the code (markdown allows code as link
- * text, so the monospace styling survives), and bare UIDs link as before.
- */
-const CONTENT_TYPE_UID_RE = /\b(api::\w[\w-]*\.\w[\w-]*)\b/g;
-
-/**
- * Regions the linker must not rewrite, in one alternation so a single split
- * keeps them intact: fenced code, inline code, and already-formed links.
- * The capture group matters — `split` with one keeps the delimiters, which
- * land on the odd indices.
- */
-const PROTECTED_RE = /(```[\s\S]*?```|`[^`\n]*`|\[[^\]]*\]\([^)]*\))/g;
-
-/** An inline code span containing nothing but a UID. */
-const CODE_SPAN_UID_RE = /^`(api::\w[\w-]*\.\w[\w-]*)`$/;
-
-const uidLink = (uid: string, label: string) =>
-  `[${label}](/content-manager/collection-types/${uid})`;
-
-function autoLinkContentTypeUids(text: string): string {
-  return text
-    .split(PROTECTED_RE)
-    .map((segment, index) => {
-      if (index % 2 === 0) {
-        // Ordinary prose: link bare UIDs.
-        return segment.replaceAll(CONTENT_TYPE_UID_RE, (uid) => uidLink(uid, uid));
-      }
-      // A protected region. Only one kind is worth touching: a code span that
-      // is precisely a UID, which becomes linked code rather than being left
-      // as a dead string.
-      const codeSpan = CODE_SPAN_UID_RE.exec(segment);
-      return codeSpan ? uidLink(codeSpan[1], segment) : segment;
-    })
-    .join('');
-}
 
 function isInternalPath(href: string): boolean {
   return href.startsWith('/content-manager/');

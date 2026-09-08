@@ -35,10 +35,13 @@ const register = async ({ strapi }: { strapi: Core.Strapi }) => {
   // AWAITED. registerMany is async, and an action that is not yet in the
   // registry when a token is minted, or when the session gate runs, is
   // indistinguishable from one that was never declared.
-  await actionProvider.registerMany(TOOL_NAMES.map(actionDefinitionForTool));
+  await actionProvider.registerMany(TOOL_NAMES.map((name) => actionDefinitionForTool(name)));
   strapi.log.info(`[${PLUGIN_NAME}] registered ${TOOL_NAMES.length} permission action(s)`);
 
-  await warnIfNothingGranted(strapi, TOOL_NAMES.map(actionForTool));
+  await warnIfNothingGranted(
+    strapi,
+    TOOL_NAMES.map((name) => actionForTool(name)),
+  );
 };
 
 export default register;

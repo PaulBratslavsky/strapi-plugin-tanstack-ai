@@ -14,7 +14,7 @@
 import { readFileSync, existsSync } from 'node:fs';
 
 const BUNDLES = ['dist/server/index.js', 'dist/server/index.mjs'];
-const SDK = /@tanstack\/ai(-[a-z]+)?/;
+const SDK = /@tanstack\/ai(?:-[a-z]+)?/;
 
 let failed = false;
 
@@ -37,7 +37,7 @@ for (const file of BUNDLES) {
     // still loads the module. The first version of this check required a
     // `from` clause and passed the ESM bundle while the CJS one failed —
     // caught only by deliberately breaking it.
-    ...src.matchAll(/^\s*import\s*["'](@tanstack\/ai[^"']*)["']\s*;?\s*$/gm),
+    ...src.matchAll(/^\s*import\s*["'](@tanstack\/ai[^"']*)["']\s*(?:;\s*)?$/gm),
   ].map((m) => m[1]);
 
   if (statics.length > 0) {

@@ -26,7 +26,15 @@
  */
 import type { AnyTextAdapter } from '@tanstack/ai';
 
-/** Cached so repeated chat turns do not re-resolve the module graph. */
+/**
+ * Cached so repeated chat turns do not re-resolve the module graph.
+ *
+ * `unicorn/no-top-level-assignment-in-function` is disabled for the two
+ * assignments below: writing this variable from inside the loader is not an
+ * accident, it is the memoisation. Hoisting it into a class or a closure to
+ * satisfy the rule would add indirection around four lines whose whole purpose
+ * is to be the one place the SDK is loaded.
+ */
 let cached: typeof import('@tanstack/ai') | null = null;
 
 /**
@@ -39,6 +47,7 @@ let cached: typeof import('@tanstack/ai') | null = null;
 export async function loadAI(): Promise<typeof import('@tanstack/ai')> {
   if (cached) return cached;
   try {
+    // eslint-disable-next-line unicorn/no-top-level-assignment-in-function -- see `cached`
     cached = await import('@tanstack/ai');
     return cached;
   } catch (error) {
@@ -109,5 +118,6 @@ async function importOrExplain<T extends string>(specifier: T) {
 
 /** Test seam: forget the cached module so a test can observe a fresh load. */
 export function resetAIForTests(): void {
+  // eslint-disable-next-line unicorn/no-top-level-assignment-in-function -- see `cached`
   cached = null;
 }

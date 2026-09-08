@@ -67,11 +67,13 @@ export async function buildPreamble(
   // rows, so the admin session is itself the authorisation, and gating them
   // behind an action nobody registered would withhold them from everyone.
   if (options?.adminUserId) {
-    tools.push(...(await buildMemoryTools(strapi, { adminUserId: options.adminUserId })));
     // Notes are NOT injected into the prompt the way memories are: a note is
     // a document, and replaying every one of them would spend the context
     // window on material this question probably has nothing to do with.
-    tools.push(...(await buildNoteTools(strapi, { adminUserId: options.adminUserId })));
+    tools.push(
+      ...(await buildMemoryTools(strapi, { adminUserId: options.adminUserId })),
+      ...(await buildNoteTools(strapi, { adminUserId: options.adminUserId })),
+    );
   }
 
   // Tools other installed plugins contribute through an `ai-tools` service.

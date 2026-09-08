@@ -71,7 +71,7 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
           host.endsWith('.local') ||
           /^10\./.test(host) ||
           /^192\.168\./.test(host) ||
-          /^172\.(1[6-9]|2\d|3[01])\./.test(host);
+          /^172\.(?:1[6-9]|2\d|3[01])\./.test(host);
       } catch {
         isLocal = false;
       }

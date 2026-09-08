@@ -20,12 +20,15 @@ const ENVELOPE_BYTES = 2048;
 /** What a tool should be told to do about an oversized result. */
 function shrinkHint(toolName: string): string {
   switch (toolName) {
-    case 'search_content':
+    case 'search_content': {
       return 'Re-issue with a smaller pageSize, name specific `fields`, scope it to one `contentType`, or leave includeContent off.';
-    case 'list_content_types':
+    }
+    case 'list_content_types': {
       return 'Re-issue for a single content type by name.';
-    default:
+    }
+    default: {
       return 'Re-issue with a smaller page size, or request fewer fields.';
+    }
   }
 }
 

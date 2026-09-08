@@ -42,8 +42,9 @@ export function useToolSources() {
 
   useEffect(() => {
     let cancelled = false;
-    fetchToolSources()
-      .then((list) => {
+    void (async () => {
+      try {
+        const list = await fetchToolSources();
         if (cancelled) return;
         setSources(list);
         // First run: everything on. A source a user has never seen should
@@ -58,14 +59,14 @@ export function useToolSources() {
           }
         }
         setLoaded(true);
-      })
-      .catch((cause: unknown) => {
+      } catch (cause) {
         if (cancelled) return;
         setError(`Could not load tool sources: ${String(cause)}`);
         // Still "loaded": the picker shows nothing, and chat carries on with
         // every source rather than none.
         setLoaded(true);
-      });
+      }
+    })();
     return () => {
       cancelled = true;
     };

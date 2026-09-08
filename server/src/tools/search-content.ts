@@ -67,6 +67,109 @@ function stripLarge(doc: Record<string, unknown>): Record<string, unknown> {
   return out;
 }
 
+interface SearchRow {
+  contentType: string;
+  documentId?: string;
+  data: Record<string, unknown>;
+}
+
+/** Arguments as the schema resolves them; only what the helpers below read. */
+interface SearchArgs {
+  contentType?: string;
+  query?: string;
+  filters?: Record<string, unknown>;
+  fields?: string[];
+  sort?: string;
+  page?: number;
+  pageSize?: number;
+  status?: 'draft' | 'published';
+  locale?: string;
+  includeContent?: boolean;
+}
+
+const errorResult = (text: string) => ({
+  content: [{ type: 'text' as const, text }],
+  isError: true as const,
+});
+
+/**
+ * The two ways a call is wrong, answered before any query runs.
+ *
+ * Both name the fix. A model that gets an opaque failure retries with the same
+ * arguments; one told what is available, or which argument needs a companion,
+ * retries with something different.
+ */
+function refuse(args: SearchArgs, apiTypes: string[]) {
+  if (args.contentType && !apiTypes.includes(args.contentType)) {
+    return errorResult(
+      `No content type "${args.contentType}". Available: ${apiTypes.join(', ') || '(none)'}`,
+    );
+  }
+
+  // `filters` and `sort` reference fields of ONE schema. Applied across
+  // heterogeneous types they would match whatever happened to fit and quietly
+  // drop the rest, which reads as "no results" rather than as a misuse.
+  if (!args.contentType && (args.filters || args.sort)) {
+    return errorResult(
+      'filters and sort name fields of a specific schema, so they need `contentType`. ' +
+        'Either pass one, or search across all types with `query` alone.',
+    );
+  }
+
+  return null;
+}
+
+/**
+ * Search one content type.
+ *
+ * NEVER THROWS. One unsearchable type — a schema with no text field, or one
+ * the caller cannot read — must not fail the whole fan-out, so it reports zero
+ * and the model still gets the types that did work.
+ */
+async function searchOne(
+  strapi: Core.Strapi,
+  uid: string,
+  args: SearchArgs,
+): Promise<{ total: number; rows: SearchRow[] }> {
+  const pageSize = Math.min(args.pageSize ?? 10, MAX_PAGE_SIZE);
+  const strip = !args.includeContent && !args.fields;
+
+  const common = {
+    ...(args.query ? { _q: args.query } : {}),
+    ...(args.filters ? { filters: args.filters } : {}),
+    ...(args.status ? { status: args.status } : {}),
+    ...(args.locale ? { locale: args.locale } : {}),
+  };
+
+  try {
+    const docs = (await strapi.documents(uid as never).findMany({
+      ...common,
+      ...(args.fields ? { fields: args.fields } : {}),
+      ...(args.sort ? { sort: args.sort } : {}),
+      page: args.page ?? 1,
+      pageSize,
+      populate: '*',
+    } as never)) as Array<Record<string, unknown>>;
+
+    const total = (await strapi.documents(uid as never).count(common as never)) as number;
+
+    return {
+      total,
+      rows: docs.map((doc) => ({
+        contentType: uid,
+        ...(typeof doc.documentId === 'string' ? { documentId: doc.documentId } : {}),
+        data: strip ? stripLarge(doc) : doc,
+      })),
+    };
+  } catch (error) {
+    strapi.log.debug(
+      `[tanstack-ai] search_content skipped ${uid}: ` +
+        (error instanceof Error ? error.message : String(error)),
+    );
+    return { total: 0, rows: [] };
+  }
+}
+
 export const searchContent = ai.mcp.defineTool({
   name: 'search_content',
   title: 'TanStack AI: Search Content',
@@ -113,92 +216,32 @@ export const searchContent = ai.mcp.defineTool({
   resolveOutputSchema: outputSchema,
 
   createHandler: (strapi: Core.Strapi) => async ({ args }): Promise<ToolResult> => {
-    const pageSize = Math.min(args.pageSize ?? 10, MAX_PAGE_SIZE);
-    const strip = !args.includeContent && !args.fields;
-
     const apiTypes = Object.values(strapi.contentTypes)
-      .filter((ct) => ct.uid.startsWith('api::'))
-      .map((ct) => ct.uid);
+      .filter((contentType) => contentType.uid.startsWith('api::'))
+      .map((contentType) => contentType.uid);
 
-    // A named type must exist. Answering with the valid options beats an
-    // opaque failure the model has to guess its way out of.
-    if (args.contentType && !apiTypes.includes(args.contentType)) {
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: `No content type "${args.contentType}". Available: ${apiTypes.join(', ') || '(none)'}`,
-          },
-        ],
-        isError: true as const,
-      };
-    }
+    const refusal = refuse(args, apiTypes);
+    if (refusal) return refusal;
 
     const targets = args.contentType ? [args.contentType] : apiTypes.slice(0, MAX_TYPES_SCANNED);
-    const truncated = !args.contentType && apiTypes.length > MAX_TYPES_SCANNED;
-
-    // `filters` and `sort` reference fields of ONE schema. Silently applying
-    // them across heterogeneous types would return whatever happened to match
-    // and quietly drop the rest, which reads as "no results" rather than as a
-    // misuse. Refuse instead.
-    if (!args.contentType && (args.filters || args.sort)) {
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text:
-              'filters and sort name fields of a specific schema, so they need `contentType`. ' +
-              'Either pass one, or search across all types with `query` alone.',
-          },
-        ],
-        isError: true as const,
-      };
-    }
-
-    const results: Array<{ contentType: string; documentId?: string; data: Record<string, unknown> }> = [];
+    const results: SearchRow[] = [];
     const totals: Array<{ contentType: string; total: number }> = [];
 
     for (const uid of targets) {
-      const common = {
-        ...(args.query ? { _q: args.query } : {}),
-        ...(args.filters ? { filters: args.filters } : {}),
-        ...(args.status ? { status: args.status } : {}),
-        ...(args.locale ? { locale: args.locale } : {}),
-      };
-
-      try {
-        const docs = await strapi.documents(uid as never).findMany({
-          ...common,
-          ...(args.fields ? { fields: args.fields } : {}),
-          ...(args.sort ? { sort: args.sort } : {}),
-          page: args.page ?? 1,
-          pageSize,
-          populate: '*',
-        } as never);
-
-        const total = await strapi.documents(uid as never).count(common as never);
-        totals.push({ contentType: uid, total: total as number });
-
-        for (const doc of docs as Array<Record<string, unknown>>) {
-          results.push({
-            contentType: uid,
-            ...(typeof doc.documentId === 'string' ? { documentId: doc.documentId } : {}),
-            data: strip ? stripLarge(doc) : doc,
-          });
-        }
-      } catch (error) {
-        // One unsearchable type must not fail the whole fan-out — a schema
-        // without a text field, or one the caller cannot read. Record a zero
-        // and carry on, so the model still gets the types that did work.
-        totals.push({ contentType: uid, total: 0 });
-        strapi.log.debug(
-          `[tanstack-ai] search_content skipped ${uid}: ` +
-            (error instanceof Error ? error.message : String(error)),
-        );
-      }
+      // Awaited in sequence on purpose: a fan-out across 25 types in parallel
+      // is 50 concurrent queries against one database, which is a good way to
+      // make a search feel like an outage.
+      const found = await searchOne(strapi, uid, args);
+      totals.push({ contentType: uid, total: found.total });
+      results.push(...found.rows);
     }
 
-    const payload = { results, totals, scanned: targets.length, truncated };
+    const payload = {
+      results,
+      totals,
+      scanned: targets.length,
+      truncated: !args.contentType && apiTypes.length > MAX_TYPES_SCANNED,
+    };
     return {
       content: [{ type: 'text' as const, text: JSON.stringify(payload) }],
       structuredContent: payload,

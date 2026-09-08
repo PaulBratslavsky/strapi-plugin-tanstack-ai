@@ -81,7 +81,7 @@ export default {
     // before the host's plugin config is merged.
     const enabled = (() => {
       try {
-        return readConfig(global.strapi as never).chat.enabled;
+        return readConfig(globalThis.strapi as never).chat.enabled;
       } catch {
         return false;
       }

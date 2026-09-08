@@ -76,11 +76,13 @@ export function useConversations() {
   // the user left off rather than presenting an empty box beside a full list.
   useEffect(() => {
     let cancelled = false;
-    fetchConversations()
-      .then(async (list) => {
+    void (async () => {
+      try {
+        const list = await fetchConversations();
         if (cancelled) return;
         setConversations(list);
         if (list.length === 0) return;
+
         const newest = await fetchConversation(list[0].documentId);
         // Re-checked AFTER the await, not before: the user may have acted
         // while this request was in flight, and their choice wins.
@@ -88,10 +90,10 @@ export function useConversations() {
         activeIdRef.current = newest.documentId;
         setActiveId(newest.documentId);
         setInitialMessages((newest.messages as Message[]) ?? []);
-      })
-      .catch((cause: unknown) => {
+      } catch (cause) {
         if (!cancelled) setError(`Could not load history: ${String(cause)}`);
-      });
+      }
+    })();
     return () => {
       cancelled = true;
     };
@@ -127,8 +129,17 @@ export function useConversations() {
     if (messages.length === 0) return;
     const title = titleFrom(messages);
 
-    // Queued behind whatever is already in flight, and reading the id from
-    // the ref rather than this closure — see the refs above.
+    /*
+     * Queued behind whatever is already in flight, and reading the id from the
+     * ref rather than this closure — see the refs above.
+     *
+     * `prefer-await` and `no-nested-functions` are off for this block because
+     * the CHAIN is the mechanism. `chainRef` holds the tail of a queue;
+     * awaiting it instead would serialise this caller rather than the saves,
+     * which is the opposite of the point. Two saves racing is how the same
+     * conversation once got created twice.
+     */
+    /* eslint-disable unicorn/prefer-await, sonarjs/no-nested-functions */
     const run = chainRef.current.then(async () => {
       const current = activeIdRef.current;
       try {
@@ -173,7 +184,8 @@ export function useConversations() {
 
     // The chain must not break on a failed save, or every later save is
     // dropped with it.
-    chainRef.current = run.catch(() => undefined);
+    chainRef.current = run.catch(() => {});
+    /* eslint-enable unicorn/prefer-await, sonarjs/no-nested-functions */
     return run;
   }, []);
 

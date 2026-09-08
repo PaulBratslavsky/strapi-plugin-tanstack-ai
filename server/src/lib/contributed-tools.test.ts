@@ -71,7 +71,7 @@ describe('discoverContributedTools', () => {
   });
 
   it('ignores plugins with no ai-tools service', () => {
-    const { strapi } = fakeStrapi({ 'some-plugin': { service: () => undefined } });
+    const { strapi } = fakeStrapi({ 'some-plugin': { service: () => {} } });
     expect(discoverContributedTools(strapi)).toEqual([]);
   });
 

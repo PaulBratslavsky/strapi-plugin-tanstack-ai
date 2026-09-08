@@ -40,7 +40,7 @@ function errorGuard(page: Page): () => void {
   ];
   const hits: string[] = [];
   const record = (t: string) => {
-    if (!IGNORE.some((re) => re.test(t))) hits.push(t);
+    if (IGNORE.every((re) => !re.test(t))) hits.push(t);
   };
   page.on('console', (m) => {
     if (m.type() === 'error') record(`console: ${m.text()}`);
@@ -473,7 +473,13 @@ test.describe('TanStack AI admin panel', () => {
     const body = JSON.parse((await sent).postData() ?? '{}');
     expect(body.forwardedProps?.enabledToolSources).not.toContain('youtube-transcripts');
 
-    await page.getByRole('button', { name: /^stop$/i }).click().catch(() => undefined);
+    // Best effort: the turn may already have finished, in which case there is
+    // no Stop to press and nothing to clean up.
+    try {
+      await page.getByRole('button', { name: /^stop$/i }).click();
+    } catch {
+      // Already finished.
+    }
 
     // And the choice is remembered across a reload — it is a per-person
     // preference, kept in localStorage rather than on the server.
