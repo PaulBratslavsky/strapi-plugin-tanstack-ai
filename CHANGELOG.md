@@ -22,7 +22,9 @@ follows the same steps as Content Manager's own list handler.
   query runs, and the permission's conditions (e.g. "only entries I created")
   are applied
 - Hidden fields are stripped from every row
-- `list_content_types` no longer describes types the caller cannot read
+- `list_content_types` no longer describes types the caller cannot read, and
+  asking for one by name gets the same answer as a type that does not exist,
+  so guessed uids cannot be probed
 - Both tools refuse to run without the caller's permissions, rather than
   treating that as unrestricted. The admin chat now passes the admin's; it
   passed nothing before

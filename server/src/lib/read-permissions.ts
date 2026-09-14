@@ -107,3 +107,19 @@ export function readableContentTypes(
 export function abilityFrom(context: unknown): UserAbility | undefined {
   return (context as { userAbility?: UserAbility } | undefined)?.userAbility;
 }
+
+/**
+ * The one answer for a content type the caller cannot use.
+ *
+ * THE SAME TEXT whether the type does not exist, is hidden from Content
+ * Manager, or exists without a Read grant. Two different messages let a caller
+ * probe guessed uids for types they are not allowed to know about — and the
+ * tools already hide unreadable types everywhere else (`list_content_types`
+ * does not describe them, fan-outs do not count them), so an error that
+ * confirmed one would undo that. Raised in review on the 1.1.0 PR.
+ *
+ * It still lists what IS available, which is all a model needs to retry.
+ */
+export function unavailableTypeMessage(uid: string, readable: string[]): string {
+  return `Content type "${uid}" is not available to you. Available: ${readable.join(', ') || '(none)'}`;
+}

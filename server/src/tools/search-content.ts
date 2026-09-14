@@ -8,6 +8,7 @@ import {
   abilityFrom,
   createReadCheckers,
   readableContentTypes,
+  unavailableTypeMessage,
   type ReadChecker,
 } from '../lib/read-permissions';
 
@@ -107,13 +108,10 @@ const errorResult = (text: string) => ({
  * arguments; one told what is available, or which argument needs a companion,
  * retries with something different.
  */
-function refuse(args: SearchArgs, displayed: string[], readable: string[]) {
-  // "Available" lists what this caller can READ, not everything that exists:
-  // offering a type and then refusing it wastes the model's retry.
-  if (args.contentType && !displayed.includes(args.contentType)) {
-    return errorResult(
-      `No content type "${args.contentType}". Available: ${readable.join(', ') || '(none)'}`,
-    );
+function refuse(args: SearchArgs, readable: string[]) {
+  // Unknown, hidden and unreadable get ONE answer — see unavailableTypeMessage.
+  if (args.contentType && !readable.includes(args.contentType)) {
+    return errorResult(unavailableTypeMessage(args.contentType, readable));
   }
 
   // `filters` and `sort` reference fields of ONE schema. Applied across
@@ -346,18 +344,11 @@ export const searchContent = ai.mcp.defineTool({
     // The grid's rows, and the ones this caller has Read on. Unreadable types
     // are removed BEFORE the scan cap, so they neither appear in `totals` (a
     // count is data) nor use up the budget and push readable types off the end.
-    const { displayed, readable } = readableContentTypes(strapi, checkerFor);
+    const { readable } = readableContentTypes(strapi, checkerFor);
 
-    const refusal = refuse(args, displayed, readable);
+    const refusal = refuse(args, readable);
     if (refusal) return refusal;
 
-    // Named, not silently emptied: an empty result for a type asked for by
-    // name reads as "there is no such content", which is false and sends the
-    // model looking elsewhere. Saying the type exists discloses no more than
-    // the permissions grid itself does.
-    if (args.contentType && !readable.includes(args.contentType)) {
-      return errorResult(`You do not have permission to read "${args.contentType}".`);
-    }
 
     const targets = args.contentType ? [args.contentType] : readable.slice(0, MAX_TYPES_SCANNED);
     const results: SearchRow[] = [];

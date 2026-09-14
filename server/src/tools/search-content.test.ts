@@ -279,8 +279,22 @@ describe('search_content', () => {
       const result = await run(strapi, { contentType: 'api::product.product' });
 
       expect(result).toMatchObject({ isError: true });
-      expect((result as any).content[0].text).toContain('permission');
+      expect((result as any).content[0].text).toContain('not available');
       expect(calls).toHaveLength(0);
+    });
+
+    it('answers an unreadable type exactly as it answers one that does not exist', async () => {
+      // Two different messages would let a caller probe guessed uids for types
+      // they are not allowed to know about.
+      const { strapi } = fakeStrapi({
+        types: ['api::article.article', 'api::product.product'],
+        readable: ['api::article.article'],
+      });
+      const text = async (contentType: string) =>
+        ((await run(strapi, { contentType })) as any).content[0].text.replace(contentType, '<uid>');
+
+      expect(await text('api::product.product')).toBe(await text('api::nope.nope'));
+      expect(await text('api::product.product')).not.toContain('api::product.product');
     });
 
     it('removes fields the caller cannot read from every row', async () => {
