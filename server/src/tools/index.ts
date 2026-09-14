@@ -1,5 +1,6 @@
 import type { Core, Modules } from '@strapi/strapi';
 import { oversizeNotice } from '../lib/size-guard';
+import { aggregateContent } from './aggregate-content';
 import { listContentTypes } from './list-content-types';
 import { searchContent } from './search-content';
 
@@ -14,7 +15,7 @@ import { searchContent } from './search-content';
  * failure this plugin has already paid for once. Now there is nothing to keep
  * in step.
  */
-export const ALL_TOOLS = [listContentTypes, searchContent];
+export const ALL_TOOLS = [listContentTypes, searchContent, aggregateContent];
 
 /** A tool's own name, before any configured prefix. */
 export const toolNames = (): string[] => ALL_TOOLS.map((tool) => tool.name);
