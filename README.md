@@ -8,7 +8,7 @@ design:
 
 | Half | Default | Needs an AI SDK? |
 |---|---|---|
-| **MCP tools** — `list_content_types`, `search_content`, contributed to Strapi's official MCP server | always on | no |
+| **MCP tools** — `list_content_types`, `search_content`, `aggregate_content`, contributed to Strapi's official MCP server | always on | no |
 | **Chat** — a chat panel inside the admin, driving those same tools | **off** | yes, and only then |
 
 Install it for the tools alone and **no AI SDK is downloaded, imported, or
@@ -75,6 +75,13 @@ about a type; it is about the library.
 - **`search_content`** — omit `contentType` and it fans out across every
   content type the caller can read, in one call. Give one and it searches that
   type with filters and sorting.
+- **`aggregate_content`** — counts, breakdowns and trends without fetching the
+  documents: `count` (omit `contentType` to total every type), `countByField`
+  ("articles per category"; a relation such as `author` groups by its name) and
+  `countByDateRange` (by day, week or month, in UTC). `total` is always exact.
+  Grouping reads at most 10,000 documents, and says `partial: true` with the
+  number `scanned` when there are more — so an answer never passes off a sample
+  as the whole.
 - **`list_content_types`** — the schema, with each field's **constraints**
   (`required`, `maxLength`, `enum`, `default`). A model told only that a field
   exists will send 90 characters to a column capped at 80 and burn its one
@@ -114,6 +121,7 @@ Each tool is gated behind its own admin permission action:
 ```
 plugin::tanstack-ai.tool.list-content-types
 plugin::tanstack-ai.tool.search-content
+plugin::tanstack-ai.tool.aggregate-content
 ```
 
 **A tool that is not granted does not appear in `tools/list` at all, and
@@ -157,6 +165,11 @@ grid Strapi uses everywhere else:
 - **Which fields:** only readable ones. Filters, sorts and text searches on a
   hidden field are removed before the query runs, and hidden fields are
   stripped from every row.
+- **Grouping is reading.** A group label is the field's value, so
+  `aggregate_content` refuses to group or bucket by a field the caller cannot
+  read, and refuses to group by a relation whose related type — or whose label
+  field — they cannot read. It names what is missing rather than returning one
+  misleading "(empty)" group.
 
 So a token with `search-content` granted and nothing ticked in its content grid
 can call the tool and gets nothing back. Tick **Read** on the types it should

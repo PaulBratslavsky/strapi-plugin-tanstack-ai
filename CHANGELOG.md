@@ -1,5 +1,38 @@
 # Changelog
 
+## 1.2.0 - 2026-09-14
+
+Adds `aggregate_content`: counts, breakdowns and trends, answered with numbers
+instead of pages of documents.
+
+"How many articles per category?" used to mean `search_content` pulling
+documents into the model's context to be counted by eye, which is slow and
+wrong past the first page. Strapi's own MCP tools do not count or group.
+
+- `count` totals one type, or every type the caller can read when
+  `contentType` is omitted
+- `countByField` groups by a field. A relation groups by the related type's
+  name, title or similar; `author.email` picks the field
+- `countByDateRange` buckets by day, week or month, with an optional
+  `dateFrom` / `dateTo`. Weeks start on Monday, and all buckets are UTC
+- `total` is always an exact count. Grouping reads at most 10,000 documents,
+  selecting only the field it needs, and reports `scanned` and `partial: true`
+  when there were more
+
+It follows the same permission rules as `search_content`. Grouping is itself a
+read, so it also refuses to group by a field, a date field, a related type, or
+a related label field the caller cannot read.
+
+Ported from the reference plugin's tool, with two of its defects fixed: it
+stopped at 1,000 documents and presented the groups as complete, and it worked
+out the week in the server's local time, so a server west of UTC filed Monday
+morning under the previous week.
+
+### Upgrading
+
+Grant `plugin::tanstack-ai.tool.aggregate-content` to the roles and admin
+tokens that should see the tool. Until it is granted, the tool does not appear.
+
 ## 1.1.0 - 2026-09-14
 
 **Security fix.** In 1.0.0, `search_content` returned content the caller was

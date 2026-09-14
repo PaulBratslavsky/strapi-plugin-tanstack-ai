@@ -3,7 +3,12 @@ import { z } from '@strapi/utils';
 import type { Core } from '@strapi/strapi';
 import type { Modules } from '@strapi/types';
 import { actionForTool } from '../lib/tool-permissions';
-import { abilityFrom, createReadCheckers, readableContentTypes } from '../lib/read-permissions';
+import {
+  abilityFrom,
+  createReadCheckers,
+  readableContentTypes,
+  unavailableTypeMessage,
+} from '../lib/read-permissions';
 
 /**
  * `list_content_types` — what does this Strapi actually hold, and how?
@@ -199,15 +204,11 @@ export const listContentTypes = ai.mcp.defineTool({
     //
     // The message lists what IS available, so a model that guessed wrong can
     // retry immediately instead of calling the tool again with no argument.
+    // Same wording as the other tools, from the one shared helper: `all` is
+    // already only the readable types, so unknown and unreadable land here alike.
     if (requested && selected.length === 0) {
-      const known = all.map((ct) => ct.uid).join(', ');
       return {
-        content: [
-          {
-            type: 'text' as const,
-            text: `No content type "${requested}". Available: ${known || '(none)'}`,
-          },
-        ],
+        content: [{ type: 'text' as const, text: unavailableTypeMessage(requested, readable) }],
         isError: true as const,
       };
     }

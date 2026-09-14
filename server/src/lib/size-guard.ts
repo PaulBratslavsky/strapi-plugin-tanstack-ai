@@ -26,6 +26,9 @@ function shrinkHint(toolName: string): string {
     case 'list_content_types': {
       return 'Re-issue for a single content type by name.';
     }
+    case 'aggregate_content': {
+      return 'Narrow the date range, use a coarser granularity, or group by a field with fewer distinct values.';
+    }
     default: {
       return 'Re-issue with a smaller page size, or request fewer fields.';
     }
