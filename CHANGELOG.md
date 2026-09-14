@@ -42,6 +42,13 @@ such as a users-permissions User or a transcript, is now included when Read is
 ticked. Types hidden from Content Manager, including this plugin's own
 conversations, memories and notes, are never searched.
 
+**The Anthropic chat provider works.** `anthropic` is the default chat
+provider, and in 1.0.0 it could not answer: the adapter was built with
+`createAnthropicChat({ apiKey, model })`, but the factory takes
+`(model, apiKey)`, so every request named a model called `[object Object]`. A
+hand-written type for the dynamically imported package hid the mistake; the
+factories are now typed from the packages themselves. Ollama was unaffected.
+
 ### Upgrading
 
 A token or role that could search everything before sees only the types ticked
