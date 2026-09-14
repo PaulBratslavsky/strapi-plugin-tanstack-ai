@@ -3,6 +3,7 @@ import { z } from '@strapi/utils';
 import type { Core } from '@strapi/strapi';
 import type { Modules } from '@strapi/types';
 import { actionForTool } from '../lib/tool-permissions';
+import { abilityFrom, createReadCheckers, readableContentTypes } from '../lib/read-permissions';
 
 /**
  * `list_content_types` — what does this Strapi actually hold, and how?
@@ -96,7 +97,14 @@ function toField(name: string, attr: Attr): Field {
   return field;
 }
 
-function summarize(ct: { uid: string; kind?: string; info?: { displayName?: string }; attributes?: Record<string, Attr> }) {
+type ContentTypeLike = {
+  uid: string;
+  kind?: string;
+  info?: { displayName?: string };
+  attributes?: Record<string, Attr>;
+};
+
+function summarize(ct: ContentTypeLike) {
   const fields: Field[] = [];
   const relations: Relation[] = [];
   const components = new Set<string>();
@@ -154,12 +162,31 @@ export const listContentTypes = ai.mcp.defineTool({
 
   resolveOutputSchema: outputSchema,
 
-  createHandler: (strapi: Core.Strapi) => async ({ args }): Promise<ToolResult> => {
-    // `api::` only. Strapi's registry also holds admin::, plugin:: and
-    // strapi:: internals — users, permissions, locales, upload files. Those
-    // are implementation detail, and listing them invites a model to go poking
-    // at the admin schema instead of the content it was asked about.
-    const all = Object.values(strapi.contentTypes).filter((ct) => ct.uid.startsWith('api::'));
+  createHandler: (strapi: Core.Strapi, context) => async ({ args }): Promise<ToolResult> => {
+    // The SAME types `search_content` reads: the permissions grid, filtered to
+    // the caller's Read grants (see `lib/read-permissions`). In 1.0.0 this was
+    // every `api::` type for everyone, which was wrong both ways — it described
+    // Product's fields to a token that cannot read Product, and it hid plugin
+    // types such as transcripts that the caller CAN read, so a model could
+    // never learn their uids. Types hidden from Content Manager — Strapi's
+    // internals, and this plugin's own conversations, memories and notes — are
+    // not in the grid, so they are not here either.
+    const userAbility = abilityFrom(context);
+    if (!userAbility) {
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: "list_content_types could not determine the caller's permissions, so it listed nothing.",
+          },
+        ],
+        isError: true as const,
+      };
+    }
+    const { readable } = readableContentTypes(strapi, createReadCheckers(strapi, userAbility));
+    const all = readable
+      .map((uid) => (strapi.contentTypes as unknown as Record<string, ContentTypeLike | undefined>)[uid])
+      .filter((ct): ct is ContentTypeLike => ct !== undefined);
 
     const requested = args.uid;
     const selected = requested ? all.filter((ct) => ct.uid === requested) : all;

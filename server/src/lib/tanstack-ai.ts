@@ -82,15 +82,23 @@ export async function loadAdapter(config: {
 }): Promise<AnyTextAdapter> {
   if (config.provider === 'anthropic') {
     const mod = await importOrExplain('@tanstack/ai-anthropic');
-    return mod.createAnthropicChat({
-      apiKey: config.apiKey,
-      model: config.model,
-    } as never) as AnyTextAdapter;
+    // POSITIONAL: `createAnthropicChat(model, apiKey, config?)`. Through 1.0.0
+    // this passed `{ apiKey, model }` as the first argument, and the `as never`
+    // that bridges the SDK's model-literal generic hid it — the adapter's
+    // `model` became that whole object, so every Anthropic turn asked the API
+    // for a model named "[object Object]". The demo runs Ollama, which is why
+    // nothing noticed; `anthropic` is the documented default. The cast now
+    // covers only the model string, where the generic genuinely cannot follow.
+    // config.apiKey is guaranteed by config validation for this provider.
+    return mod.createAnthropicChat(config.model as never, config.apiKey ?? '') as unknown as AnyTextAdapter;
   }
 
   const mod = await importOrExplain('@tanstack/ai-ollama');
-  return mod.createOllamaChat(config.model as never, config.baseURL) as AnyTextAdapter;
+  return mod.createOllamaChat(config.model, config.baseURL) as unknown as AnyTextAdapter;
 }
+
+type ProviderFactories = Pick<typeof import('@tanstack/ai-anthropic'), 'createAnthropicChat'> &
+  Pick<typeof import('@tanstack/ai-ollama'), 'createOllamaChat'>;
 
 /**
  * Dynamic import with an error that says what to do.
@@ -101,10 +109,11 @@ export async function loadAdapter(config: {
  */
 async function importOrExplain<T extends string>(specifier: T) {
   try {
-    return (await import(specifier)) as never as {
-      createAnthropicChat: (o: unknown) => unknown;
-      createOllamaChat: (m: unknown, b?: string) => unknown;
-    };
+    // The REAL factory signatures, from the packages' own types. This was a
+    // hand-written `createAnthropicChat: (o: unknown) => unknown`, which is how
+    // a call with the wrong arguments compiled. Type-only, so nothing here
+    // loads the SDK — `check:seam` guards the runtime side.
+    return (await import(specifier)) as never as ProviderFactories;
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     throw new Error(

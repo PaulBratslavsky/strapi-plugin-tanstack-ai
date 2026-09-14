@@ -60,7 +60,10 @@ export async function buildPreamble(
   strapi: Core.Strapi,
   options?: PreambleOptions,
 ): Promise<{ system: string | undefined; tools: ChatTools }> {
-  const tools = await buildChatTools(strapi, { ability: options?.ability });
+  const tools = await buildChatTools(strapi, {
+    ability: options?.ability,
+    ...(options?.adminUserId ? { adminUserId: options.adminUserId } : {}),
+  });
 
   // Memory tools only exist when we know WHOSE memories they are. They are
   // not RBAC-filtered like the tools above: they touch only the caller's own
