@@ -51,10 +51,21 @@ export interface CallerAbility {
  */
 export async function buildChatTools(
   strapi: Core.Strapi,
-  options?: { ability?: CallerAbility },
+  options?: { ability?: CallerAbility; adminUserId?: number },
 ) {
   const { toolDefinition } = await loadAI();
   const ability = options?.ability;
+
+  // The handler context MCP would have built for this caller: their ability
+  // and their id. `search_content` reads with it, so the chat returns only the
+  // content this admin's role can read in Content Manager — the same answer
+  // they would get over MCP. It was `{}` in 1.0.0, which went unnoticed because
+  // the tool never looked; now that it does, an empty context is refused
+  // rather than treated as "unrestricted".
+  const handlerContext = {
+    ...(ability ? { userAbility: ability } : {}),
+    user: { id: options?.adminUserId ?? 0 },
+  } as never;
 
   const tools = [];
 
@@ -64,17 +75,11 @@ export async function buildChatTools(
       continue;
     }
 
-    // The MCP definition resolves its schemas through a context this caller
-    // does not have; passing an empty one is correct because neither of our
-    // tools varies its schema by caller. A tool that did would need the real
-    // handler context threading through here.
-    const emptyContext = {} as never;
-
     const definition = toolDefinition({
       name: mcpTool.name,
       description: mcpTool.description,
-      inputSchema: mcpTool.resolveInputSchema(emptyContext) as never,
-      outputSchema: mcpTool.resolveOutputSchema(emptyContext) as never,
+      inputSchema: mcpTool.resolveInputSchema(handlerContext) as never,
+      outputSchema: mcpTool.resolveOutputSchema(handlerContext) as never,
     });
 
     // The handler is asserted at this ONE boundary. Strapi's MCP definitions
@@ -84,7 +89,7 @@ export async function buildChatTools(
     // Asserting once, here, is honest about where the bridge is — scattering
     // casts through the body would hide it.
     const bridge = (async (args: unknown) => {
-      const handler = mcpTool.createHandler(strapi, emptyContext);
+      const handler = mcpTool.createHandler(strapi, handlerContext);
       const result = await handler({ args, extra: {} } as never);
 
       // The MCP return shape carries both a rendered `content` array and

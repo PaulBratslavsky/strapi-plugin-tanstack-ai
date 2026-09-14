@@ -73,8 +73,8 @@ can answer *"search everything I have for X"*, because that question is not
 about a type; it is about the library.
 
 - **`search_content`** — omit `contentType` and it fans out across every
-  `api::` type in one call. Give one and it searches that type with filters and
-  sorting.
+  content type the caller can read, in one call. Give one and it searches that
+  type with filters and sorting.
 - **`list_content_types`** — the schema, with each field's **constraints**
   (`required`, `maxLength`, `enum`, `default`). A model told only that a field
   exists will send 90 characters to a column capped at 80 and burn its one
@@ -135,6 +135,40 @@ Grant them either way:
 > action instead does not work — those grants are always scoped to one content
 > type, so the subject-less check Strapi runs fails and the tool silently never
 > appears.
+
+### What each tool can read
+
+The tool action decides whether a caller may **use** a tool. It does not decide
+**what content** they see. That comes from the same Content Manager permission
+grid Strapi uses everywhere else:
+
+| Caller | Whose grid |
+|---|---|
+| An MCP client | the **admin token's** — Settings → Admin Tokens → *your token* |
+| The in-admin chat | the **logged-in admin's role** — Settings → Roles → *their role* |
+
+- **Which types:** every row in that grid — the types Content Manager displays,
+  including plugin types such as a users-permissions User. Types a plugin hides
+  from Content Manager are never searched; this plugin's own conversations,
+  memories and notes are hidden that way.
+- **Which of those:** only types with **Read** ticked. `search_content` refuses
+  a type asked for by name without it, and leaves it out of a fan-out
+  completely — rows and counts. `list_content_types` does not describe it.
+- **Which fields:** only readable ones. Filters, sorts and text searches on a
+  hidden field are removed before the query runs, and hidden fields are
+  stripped from every row.
+
+So a token with `search-content` granted and nothing ticked in its content grid
+can call the tool and gets nothing back. Tick **Read** on the types it should
+see.
+
+Two consequences worth knowing:
+
+- **Text search matches readable fields only**, which is stricter than Content
+  Manager's own search box. A number matches number fields exactly: `24` does
+  not find `2400`.
+- **Permissions are fixed per session.** After changing a role or token, start
+  a new chat or reconnect the MCP client.
 
 ---
 
@@ -214,6 +248,11 @@ unreachable — rather than broken — in a tools-only install.
 In order of likelihood: the action is not granted (see above); `mcp.enabled` is
 not set in `config/server.ts`; or the MCP client cached the tool list from
 before the grant — reconnect it.
+
+**A search returns nothing, or refuses a type, though the content exists.**
+The caller has no **Read** on that type — or, for a text search, on any of its
+text fields. Check the token's grid for MCP, or the admin's role for the chat.
+See *What each tool can read*.
 
 **`chat is enabled but @tanstack/ai could not be loaded`.**
 The optional peer is not installed in the host app. The message names the exact
