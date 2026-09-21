@@ -282,7 +282,7 @@ server's config response, so it fails closed.
 ```bash
 npm run build        # build both halves
 npm test             # unit tests (vitest, server half)
-npm run test:e2e     # browser tests against a running admin (Playwright)
+npm run test:e2e     # browser tests against a running admin (Playwright); may need .env, see below
 npm run check:seam   # assert no static AI-SDK import reaches the bundles
 npm run verify       # all of the above, as CI would
 ```
@@ -297,6 +297,12 @@ The browser tests exist for the same reason: every server path here was
 verified with curl and passed while the panel was broken, because the admin was
 fetching a different plugin id than the server served. Only the built bundle
 knows which id it compiled in.
+
+The browser tests log in to the admin once and reuse the session saved in
+`e2e/.auth/`. Only when that session is missing or expired do they need a
+login, from `STRAPI_ADMIN_EMAIL` and `STRAPI_ADMIN_PASSWORD`: copy
+`.env.example` to `.env` and fill in an admin on the Strapi at `localhost:1360`,
+or export the two variables in your shell.
 
 ## Tools from other plugins
 
