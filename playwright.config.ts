@@ -2,7 +2,9 @@ import { existsSync } from 'node:fs';
 import { defineConfig, devices } from '@playwright/test';
 
 // The admin login for auth.setup.ts lives in .env (gitignored), never in source.
-if (existsSync('.env')) process.loadEnvFile('.env');
+// process.loadEnvFile arrived in Node 20.12; on older Node, export the two
+// variables in the shell instead.
+if (existsSync('.env') && typeof process.loadEnvFile === 'function') process.loadEnvFile('.env');
 
 /**
  * Browser tests for the plugin's admin surface.
