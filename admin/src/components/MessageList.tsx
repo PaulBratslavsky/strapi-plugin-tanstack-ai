@@ -350,7 +350,7 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(function
           </Typography>
           <Box paddingTop={2}>
             <Typography variant="omega" textColor="neutral500">
-              Ask about your content types, or search across all of them.
+              Ask about your content types, search across all of them, or count what&apos;s there.
             </Typography>
           </Box>
         </EmptyState>

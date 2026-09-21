@@ -53,8 +53,9 @@ export function HomePage() {
         </Typography>
         <Box paddingTop={2}>
           <Typography textColor="neutral600">
-            Ask about this instance&apos;s content. The model can list your content types and
-            search across all of them — the same tools this plugin publishes over MCP.
+            Ask about this instance&apos;s content. The model can list your content types, search
+            across all of them and count what&apos;s there — the same tools this plugin publishes
+            over MCP.
           </Typography>
         </Box>
       </Header>

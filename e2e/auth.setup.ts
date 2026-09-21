@@ -21,12 +21,27 @@ import { test as setup, expect } from '@playwright/test';
  * this does nothing at all.
  */
 
-const EMAIL = process.env.STRAPI_ADMIN_EMAIL ?? 'paul.bratslavsky@strapi.io';
- 
-// admin's password, overridable by env. It reaches nothing but a Strapi on
-// localhost, and putting it here rather than in a .env keeps the suite
-// runnable on a fresh clone.
-const PASSWORD = process.env.STRAPI_ADMIN_PASSWORD ?? 'Monkey1234!';
+/**
+ * The admin login, from the environment — never from source.
+ *
+ * These used to fall back to a real account's email and password, which put
+ * them in a public repository. Now they are read from `STRAPI_ADMIN_EMAIL` and
+ * `STRAPI_ADMIN_PASSWORD` (set them in `.env`, which is gitignored and loaded by
+ * playwright.config.ts; see `.env.example`), and only when a login is actually
+ * needed — a stored session that still works needs no credentials at all.
+ */
+function adminCredentials(): { email: string; password: string } {
+  const email = process.env.STRAPI_ADMIN_EMAIL;
+  const password = process.env.STRAPI_ADMIN_PASSWORD;
+  if (!email || !password) {
+    throw new Error(
+      'The stored admin session is missing or expired, and STRAPI_ADMIN_EMAIL / ' +
+        'STRAPI_ADMIN_PASSWORD are not set. Copy .env.example to .env and fill in the ' +
+        'login of an admin on the Strapi at localhost:1360.',
+    );
+  }
+  return { email, password };
+}
 
 export const STORAGE_STATE = 'e2e/.auth/admin.json';
 
@@ -54,6 +69,7 @@ async function storedSessionWorks(browser: import('@playwright/test').Browser): 
 
 setup('authenticate', async ({ page, browser }) => {
   if (await storedSessionWorks(browser)) return;
+  const { email, password } = adminCredentials();
 
   await page.goto('/admin');
 
@@ -64,8 +80,8 @@ setup('authenticate', async ({ page, browser }) => {
 
   // The visible labels carry a trailing asterisk ("Email*"), so match the
   // accessible name instead.
-  await page.getByRole('textbox', { name: /email/i }).fill(EMAIL);
-  await page.locator('input[type="password"]').fill(PASSWORD);
+  await page.getByRole('textbox', { name: /email/i }).fill(email);
+  await page.locator('input[type="password"]').fill(password);
   await loginButton.click();
 
   await expect(loginButton).toHaveCount(0, { timeout: 30_000 });
