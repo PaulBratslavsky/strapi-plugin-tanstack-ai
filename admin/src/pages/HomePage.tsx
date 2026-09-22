@@ -1,5 +1,7 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Box, Loader, Main, Typography } from '@strapi/design-system';
+import { PLUGIN_ID } from '../pluginId';
+import { backendURL } from '../utils/auth';
 import styled from 'styled-components';
 
 /**
@@ -10,10 +12,8 @@ import styled from 'styled-components';
  * they only needed the MCP tools — so the module lands in its own chunk and is
  * only fetched when someone opens this page.
  *
- * There is no "chat is disabled" branch any more. The menu link is not
- * registered when chat is off (see admin/src/index.ts), so this page is
- * unreachable in that state and a branch for it would be dead code pretending
- * to be a safeguard.
+ * Fetched only once the server says chat can run, so a host missing the
+ * optional packages never requests the chunk that needs them.
  */
 const ChatPanel = lazy(() => import('../components/ChatPanel'));
 
@@ -44,6 +44,81 @@ const Body = styled(Box)`
   min-height: 0;
 `;
 
+interface ChatStatus {
+  enabled: boolean;
+  ready: boolean;
+  reason?: string;
+}
+
+/**
+ * Whether chat can run, from the server.
+ *
+ * The menu link is always registered (see admin/src/index.ts), so THIS is
+ * where "chat is off" or "chat has no API key" is handled: a notice naming the
+ * setting, instead of a chat that fails on the first message. The endpoint is
+ * unauthenticated and carries no credential values.
+ */
+function useChatStatus(): ChatStatus | 'loading' | 'unreachable' {
+  const [status, setStatus] = useState<ChatStatus | 'loading' | 'unreachable'>('loading');
+  useEffect(() => {
+    let live = true;
+    const check = async () => {
+      try {
+        const res = await fetch(`${backendURL()}/${PLUGIN_ID}/config`);
+        if (!res.ok) throw new Error(String(res.status));
+        const { chat } = (await res.json()) as { chat?: ChatStatus };
+        // A 1.2.x server answers { enabled } only; treat that as ready-when-on.
+        if (live) setStatus(chat ? { ...chat, ready: chat.ready ?? chat.enabled === true } : 'unreachable');
+      } catch {
+        if (live) setStatus('unreachable');
+      }
+    };
+    void check();
+    return () => {
+      live = false;
+    };
+  }, []);
+  return status;
+}
+
+function SetupNotice({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <Box background="neutral0" hasRadius shadow="tableShadow" padding={8}>
+      <Typography variant="delta" tag="h2">
+        {title}
+      </Typography>
+      <Box paddingTop={3}>
+        <Typography textColor="neutral600">{children}</Typography>
+      </Box>
+    </Box>
+  );
+}
+
+function ChatOrNotice() {
+  const status = useChatStatus();
+  if (status === 'loading') return <Loader small>Checking chat…</Loader>;
+  if (status === 'unreachable') {
+    return (
+      <SetupNotice title="Chat is unavailable">
+        The server did not answer the chat status check. Check that the TanStack AI plugin is
+        installed on the server, then reload.
+      </SetupNotice>
+    );
+  }
+  if (!status.ready) {
+    return (
+      <SetupNotice title={status.enabled ? 'Chat needs one more setting' : 'Chat is turned off'}>
+        {status.reason} Restart Strapi after changing the config. The MCP tools work either way.
+      </SetupNotice>
+    );
+  }
+  return (
+    <Suspense fallback={<Loader small>Loading chat…</Loader>}>
+      <ChatPanel />
+    </Suspense>
+  );
+}
+
 export function HomePage() {
   return (
     <Page>
@@ -61,9 +136,7 @@ export function HomePage() {
       </Header>
 
       <Body paddingLeft={8} paddingRight={8} paddingBottom={8}>
-        <Suspense fallback={<Loader small>Loading chat…</Loader>}>
-          <ChatPanel />
-        </Suspense>
+        <ChatOrNotice />
       </Body>
     </Page>
   );

@@ -7,6 +7,7 @@
  * that exists regardless.
  */
 import { readConfig } from '../../lib/plugin-config';
+import { chatStatus } from '../../lib/chat-status';
 
 /**
  * Always available: the panel must be able to ask whether chat is on.
@@ -81,7 +82,10 @@ export default {
     // before the host's plugin config is merged.
     const enabled = (() => {
       try {
-        return readConfig(globalThis.strapi as never).chat.enabled;
+        // Registered when the CONFIG can run chat. A missing optional package is
+        // only knowable asynchronously (bootstrap's probe), after routes are
+        // read, so that case is refused by the controller instead.
+        return chatStatus(readConfig(globalThis.strapi as never).chat).ready;
       } catch {
         return false;
       }

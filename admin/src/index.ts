@@ -1,49 +1,28 @@
 import { getTranslation } from './utils/getTranslation';
 import { PLUGIN_ID } from './pluginId';
-import { backendURL } from './utils/auth';
 import { Initializer } from './components/Initializer';
 import { PluginIcon } from './components/PluginIcon';
 
 import type { StrapiApp } from '@strapi/strapi/admin';
 
-/**
- * Ask the server whether chat is on.
- *
- * Runs during `register()`, i.e. before anyone has logged in — which is why
- * the endpoint it calls is unauthenticated and returns a single boolean.
- *
- * Fails CLOSED. If the server cannot be reached, or the plugin's server half
- * is not installed, no menu link appears. A link that leads to an error page
- * is worse than no link: it advertises a feature the install does not have.
- */
-async function chatEnabled(): Promise<boolean> {
-  try {
-    const res = await fetch(`${backendURL()}/${PLUGIN_ID}/config`);
-    if (!res.ok) return false;
-    const body = (await res.json()) as { chat?: { enabled?: boolean } };
-    return body.chat?.enabled === true;
-  } catch {
-    return false;
-  }
-}
-
 const plugin: StrapiApp['appPlugins'][string] = {
-  async register(app) {
-    // The plugin itself always registers: its MCP tools live on the server and
-    // do not need an admin surface. Only the CHAT UI is conditional.
+  /**
+   * SYNCHRONOUS, and it must stay that way.
+   *
+   * Strapi calls each plugin's `register()` without awaiting it and builds its
+   * router shortly after. Through 1.2.1 this awaited a config fetch before
+   * `addMenuLink`, so whenever that request was slower than the router (it
+   * often was on Strapi Cloud) the sidebar got the icon but the route was
+   * never registered: "Page not found". Whether chat can run is now decided on
+   * the chat page, which asks the server and shows a setup notice if not.
+   */
+  register(app) {
     app.registerPlugin({
       id: PLUGIN_ID,
       initializer: Initializer,
       isReady: false,
       name: PLUGIN_ID,
     });
-
-    if (!(await chatEnabled())) {
-      // No menu link, no route, no lazy chunk fetched. With chat off the admin
-      // ships nothing for it — which is the promise in the plugin's config
-      // surface, not just a nicety.
-      return;
-    }
 
     app.addMenuLink({
       to: `plugins/${PLUGIN_ID}`,

@@ -1,5 +1,6 @@
 import type { Core } from '@strapi/strapi';
 import { readConfig } from '../lib/plugin-config';
+import { currentChatStatus } from '../lib/chat-status';
 import { loadAI, loadAdapter } from '../lib/tanstack-ai';
 import { buildChatTools, type CallerAbility } from '../lib/chat-tools';
 import { buildMemoryTools, memoryPreamble } from '../lib/memory-tools';
@@ -133,10 +134,12 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
     },
   ) {
     const config = readConfig(strapi);
-    if (!config.chat.enabled) {
-      // Defence in depth. The route is not registered when chat is off, so
-      // reaching here means something else called the service directly.
-      throw new Error('[tanstack-ai] chat is disabled — set chat.enabled in the plugin config');
+    const status = currentChatStatus(config.chat);
+    if (!status.ready) {
+      // Defence in depth. The route is not registered, or refuses, when chat
+      // cannot run, so reaching here means something called the service
+      // directly.
+      throw new Error(`[tanstack-ai] chat is not ready: ${status.reason}`);
     }
 
     // Both loads are dynamic and happen HERE, not at module scope: this is the

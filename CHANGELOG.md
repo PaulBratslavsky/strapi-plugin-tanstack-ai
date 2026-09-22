@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.3.0 - 2026-09-22
+
+Fixes the TanStack AI admin page showing "Page not found", and turns chat on
+by default.
+
+- **Fix: "Page not found" on the TanStack AI page.** The admin waited for the
+  server's chat config before adding its menu link, but Strapi builds its
+  routes without waiting for plugins. When that request was slower than the
+  router, as it often was on Strapi Cloud, the sidebar showed the icon with no
+  page behind it. The menu link is now added immediately, and the page itself
+  checks whether chat can run.
+- **Chat is on by default.** `chat.enabled` now defaults to `true`.
+- **A missing key no longer stops Strapi booting.** Chat on with no API key
+  (Anthropic) or server URL (Ollama), or without the optional `@tanstack/*`
+  packages, now leaves chat "not ready" instead of failing the boot. Strapi
+  logs a warning naming what to add, and the TanStack AI page shows the same
+  notice instead of the chat. An unknown `provider` is still rejected at boot.
+- `GET /tanstack-ai/config` now returns `{ chat: { enabled, ready, reason? } }`.
+  `enabled` keeps its old meaning, so an older admin bundle still works.
+- The boot log line is split: `registered N/N MCP tool(s)`, and a separate
+  `chat ENABLED`, `chat disabled` or `chat is on but not ready: …`.
+
+Upgrading: a host that relied on chat being off by default should set
+`chat.enabled: false`. Otherwise the TanStack AI page shows a setup notice
+until a key is configured.
+
 ## 1.2.0 - 2026-09-14
 
 Adds `aggregate_content`: counts, breakdowns and trends, answered with numbers
