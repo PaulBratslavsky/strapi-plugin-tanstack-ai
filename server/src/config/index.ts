@@ -5,13 +5,15 @@
  *
  *   mcp   — always on. Contributes cross-type tools to Strapi's official MCP
  *           server. Pulls no AI SDK of any kind.
- *   chat  — opt-in, OFF by default. The only thing that reaches for the
+ *   chat  — ON by default since 1.3.0. The only thing that reaches for the
  *           ESM-only `@tanstack/ai`, and only via a dynamic import.
  *
- * Why chat defaults to false: `@tanstack/ai` and `@tanstack/ai-react` are
- * declared as OPTIONAL peer dependencies, so a host installing this plugin for
- * the tools alone does not have to install them. Defaulting chat to true would
- * make the plugin crash on a host that took us at our word.
+ * Chat defaulted to false through 1.2.x, because `@tanstack/ai` and the
+ * provider adapters are OPTIONAL peer dependencies and an enabled chat with a
+ * missing key crashed the boot. Neither is fatal any more: a missing
+ * credential or package makes chat "not ready" (lib/chat-status.ts), which is
+ * logged at boot and explained on the chat page, while Strapi starts normally.
+ * That is what makes a default of true safe for a tools-only host.
  */
 
 export interface McpConfig {
@@ -74,7 +76,7 @@ const defaults: PluginConfig = {
     sizeLimitBytes: 950_000,
   },
   chat: {
-    enabled: false,
+    enabled: true,
     provider: 'anthropic',
     model: 'claude-sonnet-5',
   },
@@ -84,27 +86,20 @@ export default {
   default: defaults,
 
   /**
-   * Fail at BOOT, not at first use.
+   * Reject config that is WRONG, not config that is incomplete.
    *
-   * A chat surface that is enabled but missing its credential should stop the
-   * app starting, not wait for a user to send a message and get an opaque
-   * provider error. Misconfiguration is a deployment problem, so it belongs in
-   * the deployment's feedback loop.
+   * An unknown provider is a typo, and failing the boot is the right feedback.
+   * A missing credential is not: chat is on by default, so a host that never
+   * wanted chat has no key, and throwing would stop it booting. That case is
+   * reported by lib/chat-status.ts instead — a boot warning and a notice on
+   * the chat page, both naming the setting to add.
    */
   validator(config: Partial<PluginConfig>) {
     const chat = config.chat;
-    if (chat?.enabled) {
-      if (chat.provider !== 'anthropic' && chat.provider !== 'ollama') {
-        throw new Error(
-          `[tanstack-ai] chat.provider must be 'anthropic' or 'ollama', got ${String(chat.provider)}`,
-        );
-      }
-      if (chat.provider === 'anthropic' && !chat.apiKey) {
-        throw new Error('[tanstack-ai] chat.enabled with provider "anthropic" requires chat.apiKey');
-      }
-      if (chat.provider === 'ollama' && !chat.baseURL) {
-        throw new Error('[tanstack-ai] chat.enabled with provider "ollama" requires chat.baseURL');
-      }
+    if (chat?.enabled && chat.provider !== 'anthropic' && chat.provider !== 'ollama') {
+      throw new Error(
+        `[tanstack-ai] chat.provider must be 'anthropic' or 'ollama', got ${String(chat.provider)}`,
+      );
     }
 
     const mcp = config.mcp;

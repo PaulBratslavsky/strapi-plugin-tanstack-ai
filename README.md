@@ -9,12 +9,14 @@ design:
 | Half | Default | Needs an AI SDK? |
 |---|---|---|
 | **MCP tools** — `list_content_types`, `search_content`, `aggregate_content`, contributed to Strapi's official MCP server | always on | no |
-| **Chat** — a chat panel inside the admin, driving those same tools | **off** | yes, and only then |
+| **Chat** — a chat panel inside the admin, driving those same tools | **on** (needs a provider key) | yes, and only then |
 
 Install it for the tools alone and **no AI SDK is downloaded, imported, or
 bundled**. Every `@tanstack/ai*` package is an *optional* peer dependency: the
-server reaches them through a single dynamic `import()` behind `chat.enabled`,
-and the admin's chat panel is a lazily-fetched chunk that is never loaded.
+server reaches them through a single dynamic `import()`, and the admin's chat
+panel is a lazily-fetched chunk that only loads once chat is ready. Chat is on
+by default, but a missing key or package never stops Strapi booting: the chat
+page says what to add, and the MCP tools work either way.
 
 Verified, not asserted — see *Verifying a clean install* below.
 
@@ -22,7 +24,7 @@ Verified, not asserted — see *Verifying a clean install* below.
 
 ## What the chat gives you
 
-Turning `chat.enabled` on adds a panel to the admin. It is not just a text box
+The chat is a panel in the admin. It is not just a text box
 over an LLM:
 
 | | |
@@ -199,7 +201,7 @@ export default {
         sizeLimitBytes: 950_000,  // wire budget; see below
       },
       chat: {
-        enabled: false,           // opt-in
+        enabled: true,            // the default; false turns chat off
         provider: 'anthropic',    // or 'ollama'
         model: 'claude-sonnet-5',
         apiKey: env('ANTHROPIC_API_KEY'), // anthropic only
@@ -239,19 +241,23 @@ no number at all.
 
 ### `chat.*`
 
-`enabled: false` by default. Turning it on:
+`enabled: true` by default (since 1.3.0). To use it:
 
 1. Install the optional peers you need:
    ```bash
    npm install @tanstack/ai @tanstack/ai-react react-markdown remark-gfm
    npm install @tanstack/ai-anthropic   # or @tanstack/ai-ollama
    ```
-2. Set `chat.enabled: true` plus the provider's credential.
+2. Give the provider its credential: `apiKey` for Anthropic, `baseURL` for Ollama.
 
-Config is validated **at boot**, so a chat enabled without its API key stops the
-app starting instead of failing later, opaquely, for whoever sends the first
-message. The admin menu link is registered only when chat is on, so the panel is
-unreachable — rather than broken — in a tools-only install.
+Nothing here stops Strapi booting. At boot the plugin checks whether chat can
+actually run (config, credential, and the optional packages) and logs one line:
+`chat ENABLED`, `chat disabled`, or a warning such as `chat is on but not ready:
+Chat uses Anthropic but has no API key…`. The TanStack AI page shows the same
+reason as a setup notice instead of a chat that fails on the first message.
+
+Set `enabled: false` to turn chat off; the page then says so. Only an unknown
+`provider` is rejected at boot, since that is a typo rather than a missing piece.
 
 ---
 
@@ -271,9 +277,14 @@ See *What each tool can read*.
 The optional peer is not installed in the host app. The message names the exact
 `npm install` to run.
 
-**The chat menu item is missing.**
-That is the design when `chat.enabled` is false. The link is registered from the
-server's config response, so it fails closed.
+**The TanStack AI page shows a setup notice instead of the chat.**
+Chat is off, or cannot run yet. The notice names the setting or package to add;
+the same reason is in Strapi's boot log. Restart Strapi after changing config.
+
+**"Page not found" when opening TanStack AI (1.2.1 and earlier).**
+The menu link waited on a network request, and Strapi builds its routes without
+waiting for plugins, so on a slow connection the icon appeared with no page
+behind it. Fixed in 1.3.0; upgrade.
 
 ---
 
@@ -365,11 +376,12 @@ npm run start
 A pass looks like:
 
 ```
-[tanstack-ai] registered 2 permission action(s)
-[tanstack-ai] registered 2/2 MCP tool(s); chat disabled
+[tanstack-ai] registered 3 permission action(s)
+[tanstack-ai] chat is on but not ready: Chat uses Anthropic but has no API key. …
+[tanstack-ai] registered 3/3 MCP tool(s)
 ```
 
-and `GET /tanstack-ai/config` returning `{"chat":{"enabled":false}}`.
+and `GET /tanstack-ai/config` returning `"ready": false` with that reason.
 
 Three real defects were found this way, none of them visible from a linked
 development setup — because `resolve:` bypasses npm resolution and the host's

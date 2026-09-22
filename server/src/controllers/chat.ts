@@ -3,30 +3,29 @@ import type { Core } from '@strapi/strapi';
 import type { Context } from 'koa';
 import { PLUGIN_NAME } from '../lib/tool-permissions';
 import { readConfig } from '../lib/plugin-config';
+import { currentChatStatus } from '../lib/chat-status';
 import type { ChatMessage } from '../services/chat';
 
 /**
  * POST /tanstack-ai/chat — stream an answer into the admin panel.
  *
- * Registered only when `chat.enabled` (see routes/admin), so reaching this
- * handler at all means chat is on.
+ * Registered only when the config can run chat (see routes/admin). Bootstrap's
+ * probe can still find an optional package missing, so the handler checks.
  */
 export default ({ strapi }: { strapi: Core.Strapi }) => ({
   /**
-   * Whether chat is on. Nothing else.
+   * Whether chat can run, and if not, what to change.
    *
-   * UNAUTHENTICATED, deliberately, and that is the reason it returns one
-   * boolean. The admin decides whether to render the menu link during
-   * `register()`, which runs before anyone has logged in — so an authenticated
-   * endpoint cannot answer the question at the moment it is asked.
+   * UNAUTHENTICATED, and kept that small on purpose. The chat page reads it to
+   * decide between the chat and a setup notice. `reason` names a setting or a
+   * package to install ("Set chat.apiKey…", "npm install @tanstack/ai") — it
+   * never carries the provider, model or any credential value.
    *
-   * What it discloses is a boolean that is already visible as the presence or
-   * absence of a menu item. Provider, model and credential are NOT here: those
-   * are worth a session, and the panel learns the model from the stream's own
-   * metadata once a turn runs.
+   * `enabled` keeps its old meaning (what the config asked for) so a 1.2.x
+   * admin bundle reading it still behaves.
    */
   async config(ctx: Context) {
-    ctx.body = { chat: { enabled: readConfig(strapi).chat.enabled } };
+    ctx.body = { chat: currentChatStatus(readConfig(strapi).chat) };
   },
 
   async chat(ctx: Context) {
@@ -64,6 +63,16 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
     );
     if (messages.length === 0) {
       return ctx.badRequest('messages contained no usable user or assistant turns');
+    }
+
+    // The route exists whenever the config can run chat, but bootstrap's probe
+    // may since have found an optional package missing. Say so, rather than
+    // failing inside the SDK loader mid-request.
+    const status = currentChatStatus(readConfig(strapi).chat);
+    if (!status.ready) {
+      ctx.status = 503;
+      ctx.body = { error: { status: 503, name: 'ChatNotReady', message: status.reason } };
+      return;
     }
 
     let response: Response;

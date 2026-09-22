@@ -10,10 +10,11 @@ import config from './index';
 const { default: defaults, validator } = config;
 
 describe('defaults', () => {
-  it('has chat OFF', () => {
-    // The whole reason `@tanstack/ai` can be an optional peer. Defaulting this
-    // to true would crash every host that took the packaging at its word.
-    expect(defaults.chat.enabled).toBe(false);
+  it('has chat ON', () => {
+    // Safe since 1.3.0: a missing key or optional peer makes chat "not ready"
+    // (lib/chat-status.ts) instead of failing the boot, so a tools-only host
+    // still starts.
+    expect(defaults.chat.enabled).toBe(true);
   });
 
   it('registers MCP tools unconditionally — there is no mcp.enabled to turn off', () => {
@@ -45,19 +46,18 @@ describe('validator', () => {
     expect(() => validator({ chat: { enabled: false, provider: 'anthropic', model: 'x' } })).not.toThrow();
   });
 
-  it('rejects anthropic chat with no API key, at boot', () => {
-    // Boot, not first use: misconfiguration is a deployment problem, so it
-    // belongs in the deployment's feedback loop rather than surfacing as an
-    // opaque provider error to whoever sends the first message.
+  it('boots anthropic chat with no API key, leaving it not ready', () => {
+    // Chat is on by default, so throwing here would stop every host without a
+    // key from booting. The gap is reported by chatStatus instead.
     expect(() =>
       validator({ chat: { enabled: true, provider: 'anthropic', model: 'claude-sonnet-5' } }),
-    ).toThrow(/apiKey/);
+    ).not.toThrow();
   });
 
-  it('rejects ollama chat with no baseURL', () => {
-    expect(() => validator({ chat: { enabled: true, provider: 'ollama', model: 'qwen3:14b' } })).toThrow(
-      /baseURL/,
-    );
+  it('boots ollama chat with no baseURL, leaving it not ready', () => {
+    expect(() =>
+      validator({ chat: { enabled: true, provider: 'ollama', model: 'qwen3:14b' } }),
+    ).not.toThrow();
   });
 
   it('rejects an unknown provider by name', () => {
