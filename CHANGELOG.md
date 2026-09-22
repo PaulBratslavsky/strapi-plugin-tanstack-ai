@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.3.1 - 2026-09-22
+
+Fixes the admin chat failing with an Anthropic 400 on the message after a tool
+call: "tool_use ids were found without tool_result blocks immediately after".
+
+The chat sends its history in TanStack AI's wire format, where an assistant
+turn that wrote text and called a tool arrives as `{ role, content, toolCalls }`
+followed by a separate `{ role: 'tool' }` result. History is text only, so the
+result was dropped, but the controller kept the assistant turn as sent, with
+`toolCalls` still attached. The history is now reduced to `{ role, content }`
+per turn (`lib/chat-messages.ts`). Turns with a tool call and no text were
+already dropped, which is why only some conversations failed.
+
 ## 1.3.0 - 2026-09-22
 
 Fixes the TanStack AI admin page showing "Page not found", and turns chat on
