@@ -4,7 +4,7 @@ import type { Context } from 'koa';
 import { PLUGIN_NAME } from '../lib/tool-permissions';
 import { readConfig } from '../lib/plugin-config';
 import { currentChatStatus } from '../lib/chat-status';
-import type { ChatMessage } from '../services/chat';
+import { toChatMessages } from '../lib/chat-messages';
 
 /**
  * POST /tanstack-ai/chat — stream an answer into the admin panel.
@@ -54,13 +54,9 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
     if (!Array.isArray(body?.messages)) {
       return ctx.badRequest('messages must be an array of { role, content }');
     }
-    const messages = body.messages.filter(
-      (m): m is ChatMessage =>
-        !!m &&
-        typeof m === 'object' &&
-        ((m as ChatMessage).role === 'user' || (m as ChatMessage).role === 'assistant') &&
-        typeof (m as ChatMessage).content === 'string',
-    );
+    // Projected to { role, content }: see lib/chat-messages.ts for why a
+    // filter that kept the original objects broke the next Anthropic turn.
+    const messages = toChatMessages(body.messages);
     if (messages.length === 0) {
       return ctx.badRequest('messages contained no usable user or assistant turns');
     }
