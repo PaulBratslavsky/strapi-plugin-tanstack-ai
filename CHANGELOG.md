@@ -15,6 +15,19 @@ plugin and the adapter across two blocks:
 npm install strapi-plugin-tanstack-ai @tanstack/ai-anthropic
 ```
 
+The README is also restructured to the shape a reader expects: what it is,
+highlights, overview, install, a three-step quick start, then links. The
+reference material it used to carry inline now lives in `docs/`, which ships
+with the package:
+
+```
+docs/permissions.md     which action gates which tool, and what a caller can read
+docs/configuration.md   every option under mcp.* and chat.*
+docs/chat.md            history, memory, notes, the context badge
+docs/extending.md       contributing tools from a plugin or from your own app
+docs/development.md     build, test, verifying a clean install
+```
+
 Why the adapters stay optional peers while the SDK does not: every chat user
 needs `@tanstack/ai`, and nobody chooses it. An adapter is a real either/or,
 and the two differ by about 6x in installed size (`@tanstack/ai-anthropic`
