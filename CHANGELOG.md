@@ -1,5 +1,70 @@
 # Changelog
 
+## 1.5.1 - 2026-09-26
+
+Documentation only, no code change.
+
+The 1.5.0 README still described every `@tanstack/ai*` package as an optional
+peer, and its clean-install check still expected `node_modules/@tanstack/ai*`
+to match nothing. Both were true before 1.5.0 and false after it.
+
+The install section now leads with the whole command rather than splitting the
+plugin and the adapter across two blocks:
+
+```bash
+npm install strapi-plugin-tanstack-ai @tanstack/ai-anthropic
+```
+
+The README is also restructured to the shape a reader expects: what it is,
+highlights, overview, install, a three-step quick start, then links. The
+reference material it used to carry inline now lives in `docs/`, which ships
+with the package:
+
+```
+docs/permissions.md     which action gates which tool, and what a caller can read
+docs/configuration.md   every option under mcp.* and chat.*
+docs/chat.md            history, memory, notes, the context badge
+docs/extending.md       contributing tools from a plugin or from your own app
+docs/development.md     build, test, verifying a clean install
+```
+
+Why the adapters stay optional peers while the SDK does not: every chat user
+needs `@tanstack/ai`, and nobody chooses it. An adapter is a real either/or,
+and the two differ by about 6x in installed size (`@tanstack/ai-anthropic`
+pulls `@anthropic-ai/sdk`, around 9 MB; `@tanstack/ai-ollama` about 1.5 MB),
+so shipping both would charge every install for the one it never loads.
+
+## 1.5.0 - 2026-09-26
+
+`@tanstack/ai` and `@tanstack/ai-react` are now ordinary dependencies of this
+plugin, rather than optional peer dependencies.
+
+Chat has been on by default since 1.3.0, but the packages it needs were
+optional peers, which npm deliberately does not install. So the default
+install produced a plugin whose headline feature reported itself broken:
+
+```
+warn: [tanstack-ai] chat is on but not ready: chat is enabled but
+@tanstack/ai could not be loaded. It is an optional peer dependency...
+```
+
+A feature that is on by default cannot depend on packages the install skips.
+Installing the plugin now gives you a working chat, and the only package left
+to add is the adapter for your provider:
+
+```bash
+npm install strapi-plugin-tanstack-ai
+npm install @tanstack/ai-ollama      # or @tanstack/ai-anthropic
+```
+
+The adapters stay optional peers on purpose: you use exactly one, and a host
+that installed this for the MCP tools should not carry the other.
+
+What has not changed is the seam. The SDK is still reached only through a
+dynamic `import()` behind `chat.enabled`, and `npm run check:seam` still
+asserts that no static require of it survives in the built bundle. It is on
+disk now, but a tools-only host never loads it.
+
 ## 1.4.0 - 2026-09-26
 
 The chat can now offer tools the APPLICATION provides, not only tools from

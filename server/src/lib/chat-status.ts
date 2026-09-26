@@ -3,7 +3,7 @@
  *
  * Chat is ON by default (1.3.0). That default is only safe because a missing
  * piece no longer stops Strapi booting: a tools-only host may have no API key
- * and none of the optional `@tanstack/*` peers, and must still start. So
+ * and no provider adapter installed, and must still start. So
  * instead of throwing, the plugin works out whether chat is usable and says
  * why not — in the boot log, on the unauthenticated config endpoint, and on
  * the chat page itself.
@@ -16,7 +16,7 @@
  *                         at load time, before anything async can run.
  *   probeChat(config)   — asynchronous, run once in bootstrap: additionally
  *                         loads the SDK and the provider's adapter package,
- *                         so an uninstalled optional peer is reported at boot
+ *                         so an uninstalled adapter is reported at boot
  *                         rather than as a failed first message.
  */
 import type { ChatConfig } from '../config';

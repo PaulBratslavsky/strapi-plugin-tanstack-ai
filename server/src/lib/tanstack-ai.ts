@@ -2,12 +2,14 @@
  * The entire boundary between this CommonJS plugin and the ESM-only SDK.
  *
  * WHY A SEAM EXISTS AT ALL. Strapi plugins are CommonJS; `@tanstack/ai` ships
- * ESM only. A top-level `import` would make the SDK a hard load-time
- * dependency of the plugin — so a host that installed this for the MCP tools,
- * and never wanted chat, would still have to have the package present and
- * loadable. That is the opposite of the packaging promise: the SDK is an
- * OPTIONAL peer dependency (see package.json), which means it may genuinely be
- * absent.
+ * ESM only. A top-level `import` would make the SDK a hard LOAD-TIME
+ * dependency, so a host that installed this for the MCP tools, and never
+ * wanted chat, would pay for an ESM module graph it never uses and would
+ * crash on boot if anything in it failed to resolve.
+ *
+ * Since 1.5.0 the SDK ships as a normal dependency, so it is present on disk.
+ * That changes nothing here: present is not loaded. The provider adapters are
+ * still OPTIONAL peers and may genuinely be absent.
  *
  * A dynamic `import()` from CJS is the supported bridge, and it costs nothing
  * ergonomically here because every consumer is already async.
@@ -54,8 +56,9 @@ export async function loadAI(): Promise<typeof import('@tanstack/ai')> {
     const detail = error instanceof Error ? error.message : String(error);
     throw new Error(
       '[tanstack-ai] chat is enabled but @tanstack/ai could not be loaded. ' +
-        'It is an optional peer dependency, so install it in the host app: ' +
-        `npm install @tanstack/ai. Original error: ${detail}`,
+        'It ships as a dependency of this plugin, so this usually means a ' +
+        'broken or partial install: reinstall the host app dependencies ' +
+        `(npm install). Original error: ${detail}`,
       // Keeps the module-resolution stack, which names the file that actually
       // failed to load.
       { cause: error },

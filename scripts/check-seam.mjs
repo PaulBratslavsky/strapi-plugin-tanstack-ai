@@ -2,12 +2,14 @@
  * Fail if the AI SDK is loaded statically.
  *
  * The plugin's central promise is that a host installing it for the MCP tools
- * never has to install @tanstack/ai — it is an OPTIONAL peer, reached only
- * through a dynamic import behind `chat.enabled`. That promise is not a
- * comment, it is a property of the built bundle, and this asserts it.
+ * never LOADS @tanstack/ai. It is reached only through a dynamic import
+ * behind `chat.enabled`. That promise is not a comment, it is a property of
+ * the built bundle, and this asserts it.
  *
- * A static require of the SDK means a host with chat off crashes at boot with
- * a module-not-found for a package they were told they did not need. That
+ * Since 1.5.0 the SDK is a normal dependency, so it is on disk either way,
+ * and the provider adapters remain optional peers that may be absent. A
+ * static require of either pulls an ESM graph into a CommonJS boot for hosts
+ * that turned chat off, and for an absent adapter it crashes outright. That
  * failure happens at THEIR install, which is exactly why it has to be caught
  * at ours.
  */
