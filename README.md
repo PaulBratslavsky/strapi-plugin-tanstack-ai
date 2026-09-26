@@ -232,6 +232,49 @@ tool returns a structured refusal naming how to narrow the call (smaller
 `pageSize`, specific `fields`, one `contentType`) rather than letting the client
 reject it with an opaque "result too large" the model cannot act on.
 
+### `chat.toolSources`
+
+Services in the HOST APPLICATION that contribute chat tools, by uid:
+
+```ts
+chat: {
+  toolSources: ['api::healthcheck.healthcheck'],
+}
+```
+
+Strapi's MCP server already accepts a tool registered in an app's
+`src/index.ts`, so a project can put a one-off tool on `/mcp` without
+scaffolding a plugin. This is how that same tool also reaches the chat. Each
+listed service exposes what a contributing plugin exposes:
+
+```ts
+export default ({ strapi }) => ({
+  getTools() {
+    return [
+      {
+        name: 'healthcheck',
+        description: 'Is this Strapi healthy?',
+        schema: z.object({}),
+        action: 'api::healthcheck.run',   // the admin permission gating it
+        execute: async () => strapi.service('api::healthcheck.healthcheck').run(),
+      },
+    ];
+  },
+  getMeta() {
+    return { label: 'Healthcheck' };
+  },
+});
+```
+
+Tools are namespaced `<source>__<tool>` and gated by the action each one
+declares, the same as a plugin's. Empty by default.
+
+**Listed, never scanned.** Discovering app services by naming convention would
+put tools in the chat that nothing in the config accounts for. Plugins remain
+the primary way to ship tools — a plugin owns its permissions and can be
+installed in another project; this is for the one-off a project keeps to
+itself.
+
 ### `chat.contextWindow`
 
 Only needed when the window cannot be detected, or when the detected value is

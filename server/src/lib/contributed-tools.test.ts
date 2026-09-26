@@ -26,16 +26,27 @@ const validTool = (name: string) => ({
  * correctly withholds everything and the tests would be asserting on an empty
  * list while appearing to pass for the wrong reason.
  */
-function fakeStrapi(plugins: Record<string, unknown>, registered: string[] = []) {
+function fakeStrapi(
+  plugins: Record<string, unknown>,
+  registered: string[] = [],
+  /** Services the APP exposes, keyed by uid, plus the uids listed in config. */
+  app: { services?: Record<string, unknown>; toolSources?: string[] } = {},
+) {
   const warn = vi.fn();
   const known = new Set(registered);
   const strapi = {
     plugins,
     plugin: (name: string) => plugins[name],
+    config: {
+      get: (key: string) =>
+        key === 'plugin::tanstack-ai'
+          ? { chat: { toolSources: app.toolSources ?? [] }, mcp: {} }
+          : undefined,
+    },
     service: (name: string) =>
       name === 'admin::permission'
         ? { actionProvider: { get: (id: string) => (known.has(id) ? { actionId: id } : undefined) } }
-        : undefined,
+        : app.services?.[name],
     log: { warn, info: vi.fn(), debug: vi.fn(), error: vi.fn() },
   } as unknown as Core.Strapi;
   return { strapi, warn };
@@ -175,5 +186,79 @@ describe('buildContributedTools', () => {
   it('offers nothing when the user has switched everything off', async () => {
     // An empty array is a real choice and is respected, unlike undefined.
     expect(await build(twoPlugins(), [])).toEqual([]);
+  });
+});
+
+
+/**
+ * Tools contributed by the APPLICATION, not by a plugin.
+ *
+ * Strapi's MCP server already accepts a tool registered in `src/index.ts`, so
+ * a project can put a one-off tool on /mcp without scaffolding a plugin. The
+ * chat could not see those, which made the split an implementation detail
+ * rather than a decision. A project now names the services it wants offered:
+ *
+ *   chat: { toolSources: ['api::healthcheck.healthcheck'] }
+ *
+ * Listed EXPLICITLY, never scanned: "why is this tool in my chat?" has to have
+ * an answer that is visible in config.
+ */
+describe('discoverContributedTools, app-level sources', () => {
+  const appService = (tools: unknown[], meta?: unknown) => ({
+    getTools: () => tools,
+    ...(meta ? { getMeta: () => meta } : {}),
+  });
+
+  it('offers tools from a service the project listed', () => {
+    const { strapi } = fakeStrapi({}, ['api::healthcheck.run'], {
+      toolSources: ['api::healthcheck.healthcheck'],
+      services: {
+        'api::healthcheck.healthcheck': appService(
+          [{ ...validTool('healthcheck'), action: 'api::healthcheck.run' }],
+          { label: 'Healthcheck' },
+        ),
+      },
+    });
+
+    const sources = discoverContributedTools(strapi);
+    expect(sources).toHaveLength(1);
+    expect(sources[0].label).toBe('Healthcheck');
+    expect(sources[0].tools.map((t) => t.namespacedName)).toEqual(['healthcheck__healthcheck']);
+    expect(sources[0].tools[0].actionId).toBe('api::healthcheck.run');
+  });
+
+  it('offers nothing when the project listed nothing', () => {
+    const { strapi } = fakeStrapi({}, ['api::healthcheck.run'], {
+      services: {
+        'api::healthcheck.healthcheck': appService([
+          { ...validTool('healthcheck'), action: 'api::healthcheck.run' },
+        ]),
+      },
+    });
+
+    expect(discoverContributedTools(strapi)).toEqual([]);
+  });
+
+  it('warns and skips a listed service that is missing or not a tool source', () => {
+    const { strapi, warn } = fakeStrapi({}, [], {
+      toolSources: ['api::nope.nope'],
+      services: {},
+    });
+
+    expect(discoverContributedTools(strapi)).toEqual([]);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('api::nope.nope'));
+  });
+
+  it('withholds a tool whose declared action was never registered', () => {
+    const { strapi } = fakeStrapi({}, [], {
+      toolSources: ['api::healthcheck.healthcheck'],
+      services: {
+        'api::healthcheck.healthcheck': appService([
+          { ...validTool('healthcheck'), action: 'api::healthcheck.run' },
+        ]),
+      },
+    });
+
+    expect(discoverContributedTools(strapi)).toEqual([]);
   });
 });

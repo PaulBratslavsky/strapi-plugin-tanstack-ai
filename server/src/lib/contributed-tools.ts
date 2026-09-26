@@ -1,5 +1,6 @@
 import type { Core } from '@strapi/strapi';
 import { loadAI } from './tanstack-ai';
+import { readConfig } from './plugin-config';
 import { actionForContributedTool, canRegisterAction, PLUGIN_NAME } from './tool-permissions';
 
 /**
@@ -71,7 +72,10 @@ export interface DiscoveredTool {
 export interface DiscoveredSource {
   /** Namespace prefix, e.g. `youtube-transcripts`. */
   id: string;
-  /** The Strapi plugin it came from. */
+  /**
+   * Where the tools came from: a plugin id, or a service uid for a source the
+   * project listed in `chat.toolSources`.
+   */
   pluginName: string;
   label: string;
   description: string;
@@ -247,23 +251,107 @@ export function discoverContributedTools(strapi: Core.Strapi): DiscoveredSource[
   const sources: DiscoveredSource[] = [];
   const seen = new Set<string>();
 
-  const pluginNames = Object.keys(strapi.plugins ?? {});
-  for (const pluginName of pluginNames) {
-    if (pluginName === PLUGIN_NAME) continue;
+  const plugins = Object.keys(strapi.plugins ?? {}).filter((name) => name !== PLUGIN_NAME);
+  for (const pluginName of plugins) {
+    const source = guarded(strapi, pluginName, () => discoverFromPlugin(strapi, pluginName, seen));
+    if (source) sources.push(source);
+  }
 
-    // Per plugin, so one contributor cannot cost the others their tools.
-    try {
-      const source = discoverFromPlugin(strapi, pluginName, seen);
-      if (source) sources.push(source);
-    } catch (error) {
-      strapi.log.warn(
-        `[tanstack-ai] tool discovery failed for ${pluginName}: ` +
-          (error instanceof Error ? error.message : String(error)),
-      );
-    }
+  for (const uid of appToolSources(strapi)) {
+    const source = guarded(strapi, uid, () => discoverFromAppService(strapi, uid, seen));
+    if (source) sources.push(source);
   }
 
   return sources;
+}
+
+/**
+ * One source's whole inspection, so a contributor that throws is logged and
+ * skipped while the rest are still found.
+ */
+function guarded(
+  strapi: Core.Strapi,
+  sourceName: string,
+  discover: () => DiscoveredSource | null,
+): DiscoveredSource | null {
+  try {
+    return discover();
+  } catch (error) {
+    strapi.log.warn(
+      `[tanstack-ai] tool discovery failed for ${sourceName}: ` +
+        (error instanceof Error ? error.message : String(error)),
+    );
+    return null;
+  }
+}
+
+/**
+ * Service uids the PROJECT listed in `chat.toolSources`.
+ *
+ * Listed, never scanned. Strapi's MCP server already takes a tool registered
+ * in the app's `src/index.ts`, so a project can put a one-off tool on /mcp
+ * without scaffolding a plugin; this is how the same tool reaches the chat.
+ * Scanning for a conventional service name instead would make "why is this
+ * tool in my chat?" unanswerable from the config.
+ */
+function appToolSources(strapi: Core.Strapi): string[] {
+  try {
+    const listed = readConfig(strapi).chat.toolSources;
+    return Array.isArray(listed) ? listed.filter((uid) => typeof uid === 'string') : [];
+  } catch {
+    // No config (or a shape we do not recognise): contribute nothing.
+    return [];
+  }
+}
+
+/**
+ * One app-level source: a service exposing the same `ai-tools` contract.
+ *
+ * The namespace is the uid's own name — `api::healthcheck.healthcheck` becomes
+ * `healthcheck` — so tools read as `healthcheck__<tool>`, the same shape a
+ * plugin's tools get.
+ */
+function discoverFromAppService(
+  strapi: Core.Strapi,
+  uid: string,
+  seen: Set<string>,
+): DiscoveredSource | null {
+  const service = strapi.service(uid as never) as
+    | { getTools?: () => unknown; getMeta?: () => unknown }
+    | undefined;
+
+  if (typeof service?.getTools !== 'function') {
+    // Named in config but not usable: always worth a line, because the project
+    // asked for it explicitly and would otherwise see silence.
+    strapi.log.warn(
+      `[tanstack-ai] chat.toolSources lists "${uid}", which has no getTools() — skipped`,
+    );
+    return null;
+  }
+
+  const contributed = service.getTools();
+  if (!Array.isArray(contributed)) {
+    strapi.log.warn(`[tanstack-ai] ${uid}.getTools() did not return an array`);
+    return null;
+  }
+
+  const sourceId = safeSourceId(uid.split('::').pop()?.split('.', 1)[0] ?? uid);
+  const tools = collectTools(strapi, uid, sourceId, contributed, seen);
+  if (tools.length === 0) return null;
+
+  const meta = (typeof service.getMeta === 'function' ? service.getMeta() : null) as
+    | ToolSourceMeta
+    | null;
+
+  strapi.log.info(`[tanstack-ai] discovered ${tools.length} tool(s) from "${uid}"`);
+
+  return {
+    id: sourceId,
+    pluginName: uid,
+    label: meta?.label ?? sourceId,
+    description: meta?.description ?? '',
+    tools,
+  };
 }
 
 /** One contributed tool, wrapped as a TanStack AI tool. */
