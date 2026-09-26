@@ -159,8 +159,10 @@ The caller has no **Read** on that type, or for a text search, on any of its
 text fields. Check the token's grid for MCP, or the admin's role for the chat.
 
 **`chat is enabled but @tanstack/ai-… could not be loaded`.**
-The provider's adapter package is not installed. The message names the exact
-`npm install` to run.
+Those packages ship with the plugin, so this means a broken or partial
+install. Reinstall the host app's dependencies with `npm install`. If you
+added your own `@tanstack/*` packages at the project root, remove them: a
+second copy at a different version is the usual cause.
 
 **The TanStack AI page shows a setup notice instead of the chat.**
 Chat is off, or cannot run yet. The notice names the setting or package to add,
