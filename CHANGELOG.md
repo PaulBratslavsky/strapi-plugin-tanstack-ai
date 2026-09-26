@@ -4,17 +4,22 @@
 
 Documentation only, no code change.
 
-The 1.5.0 README still showed the install as two separate blocks, the plugin
-in one and the adapter in the other, so the command a chat user actually runs
-never appeared whole:
+The 1.5.0 README still described every `@tanstack/ai*` package as an optional
+peer, and its clean-install check still expected `node_modules/@tanstack/ai*`
+to match nothing. Both were true before 1.5.0 and false after it.
+
+The install section now leads with the whole command rather than splitting the
+plugin and the adapter across two blocks:
 
 ```bash
-npm install strapi-plugin-tanstack-ai @tanstack/ai-ollama
+npm install strapi-plugin-tanstack-ai @tanstack/ai-anthropic
 ```
 
-The install section now leads with that line, says the second package is a
-choice between a local model and Claude, and keeps the tools-only install as
-the variant rather than the headline.
+Why the adapters stay optional peers while the SDK does not: every chat user
+needs `@tanstack/ai`, and nobody chooses it. An adapter is a real either/or,
+and the two differ by about 6x in installed size (`@tanstack/ai-anthropic`
+pulls `@anthropic-ai/sdk`, around 9 MB; `@tanstack/ai-ollama` about 1.5 MB),
+so shipping both would charge every install for the one it never loads.
 
 ## 1.5.0 - 2026-09-26
 

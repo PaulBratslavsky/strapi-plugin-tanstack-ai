@@ -11,12 +11,14 @@ design:
 | **MCP tools** — `list_content_types`, `search_content`, `aggregate_content`, contributed to Strapi's official MCP server | always on | no |
 | **Chat** — a chat panel inside the admin, driving those same tools | **on** (needs a provider key) | yes, and only then |
 
-Install it for the tools alone and **no AI SDK is downloaded, imported, or
-bundled**. Every `@tanstack/ai*` package is an *optional* peer dependency: the
-server reaches them through a single dynamic `import()`, and the admin's chat
-panel is a lazily-fetched chunk that only loads once chat is ready. Chat is on
-by default, but a missing key or package never stops Strapi booting: the chat
-page says what to add, and the MCP tools work either way.
+Install it for the tools alone and **no AI SDK is ever loaded or bundled**.
+`@tanstack/ai` ships with the plugin, since every chat user needs it, but the
+server reaches it through a single dynamic `import()` behind `chat.enabled`,
+and the admin's chat panel is a lazily-fetched chunk that only loads once chat
+is ready. The provider adapters stay *optional* peers, because you use exactly
+one and they differ in weight by about 6x. Chat is on by default, and a
+missing key or adapter never stops Strapi booting: the chat page says what to
+add, and the MCP tools work either way.
 
 Verified, not asserted — see *Verifying a clean install* below.
 
@@ -109,12 +111,13 @@ tools. That is not an error — a host may install this for the admin chat alone
 ## Install
 
 ```bash
-npm install strapi-plugin-tanstack-ai @tanstack/ai-ollama
+npm install strapi-plugin-tanstack-ai @tanstack/ai-anthropic
 ```
 
-Two packages, and the second one is a choice: it is the adapter for the model
-provider you want the chat to use. `@tanstack/ai-ollama` runs a model on your
-own machine; `@tanstack/ai-anthropic` sends the conversation to Claude.
+Two packages, and the second one is a choice: the adapter for the model
+provider the chat should use. `@tanstack/ai-anthropic` sends the conversation
+to Claude and is what `chat.provider` defaults to; `@tanstack/ai-ollama` runs
+a model on your own machine instead, with no key and nothing leaving it.
 Install exactly one. Everything else the chat needs ships with the plugin.
 
 Only want the MCP tools? Install the plugin on its own and set
@@ -420,9 +423,9 @@ npx create-strapi-app@5 clean --non-interactive --no-run --typescript \
 cd clean
 npm install /path/to/strapi-plugin-tanstack-ai-0.1.0.tgz
 
-ls node_modules/@tanstack/ai*   # expect: no matches
+ls node_modules/@tanstack/ai*   # expect: ai, ai-react. No adapter.
 # add `mcp: { enabled: true }` to config/server.ts, then:
-npm run build                   # the host's admin must build with NO SDK present
+npm run build                   # the host's admin must build with NO adapter present
 npm run start
 ```
 
