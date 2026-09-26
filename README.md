@@ -109,17 +109,19 @@ tools. That is not an error — a host may install this for the admin chat alone
 ## Install
 
 ```bash
-npm install strapi-plugin-tanstack-ai
+npm install strapi-plugin-tanstack-ai @tanstack/ai-ollama
 ```
 
-That is everything the MCP tools need. For the chat, add the adapter for your
-provider, which is the one package the plugin cannot choose for you:
+Two packages, and the second one is a choice: it is the adapter for the model
+provider you want the chat to use. `@tanstack/ai-ollama` runs a model on your
+own machine; `@tanstack/ai-anthropic` sends the conversation to Claude.
+Install exactly one. Everything else the chat needs ships with the plugin.
 
-```bash
-npm install @tanstack/ai-ollama      # or @tanstack/ai-anthropic
-```
+Only want the MCP tools? Install the plugin on its own and set
+`chat: { enabled: false }`. Nothing else is required, and no AI SDK is ever
+loaded.
 
-Then **grant the tool permissions**, which is not optional — see below.
+Then **grant the tool permissions**, which is not optional: see below.
 
 ---
 
@@ -293,16 +295,16 @@ no number at all.
 
 `enabled: true` by default (since 1.3.0). To use it:
 
-1. Install the adapter for your provider. Since 1.5.0 the SDK itself
-   (`@tanstack/ai`, `@tanstack/ai-react`) comes with the plugin; only the
-   adapters are optional peers, because you pick exactly one:
+1. Install the adapter for your provider, if you have not already:
    ```bash
    npm install @tanstack/ai-ollama      # or @tanstack/ai-anthropic
    ```
+   The SDK comes with the plugin (1.5.0+). The adapters do not, because you
+   use exactly one.
 2. Give the provider its credential: `apiKey` for Anthropic, `baseURL` for Ollama.
 
 Nothing here stops Strapi booting. At boot the plugin checks whether chat can
-actually run (config, credential, and the optional packages) and logs one line:
+actually run (config, credential, and the adapter package) and logs one line:
 `chat ENABLED`, `chat disabled`, or a warning such as `chat is on but not ready:
 Chat uses Anthropic but has no API key…`. The TanStack AI page shows the same
 reason as a setup notice instead of a chat that fails on the first message.
