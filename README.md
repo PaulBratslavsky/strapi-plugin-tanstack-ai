@@ -31,12 +31,13 @@ The plugin has two halves, gated separately, and the split is the whole design:
 | **MCP tools** — `list_content_types`, `search_content`, `aggregate_content`, contributed to Strapi's official [MCP server](https://docs.strapi.io/cms/features/strapi-mcp-server) | always on | no |
 | **Chat** — a panel inside the admin, driving those same tools | on | yes, and only then |
 
-Install it for the tools alone and **no AI SDK is ever loaded or bundled**.
-`@tanstack/ai` ships with the plugin, since every chat user needs it, but the
-server reaches it through a single dynamic `import()` behind `chat.enabled`,
-and the chat panel is a lazily-fetched chunk that only loads once chat is
-ready. A missing key or adapter never stops Strapi booting: the chat page says
-what to add, and the MCP tools work either way.
+Install it for the tools alone and **no AI SDK is ever loaded**. The SDK and
+both provider adapters ship with the plugin at pinned versions, so there is
+one coherent set and nothing to resolve, but the server reaches them through a
+single dynamic `import()` behind `chat.enabled`, and the chat panel is a
+lazily-fetched chunk that only loads once chat is ready. A missing key never
+stops Strapi booting: the chat page says what to add, and the MCP tools work
+either way.
 
 > Packaging claims here are checked against a real, empty Strapi.
 > See [Verifying a clean install](docs/development.md#verifying-a-clean-install).
@@ -83,17 +84,15 @@ tools. That is not an error: a host may install this for the chat alone.
 ## Install
 
 ```bash
-npm install strapi-plugin-tanstack-ai @tanstack/ai-anthropic
+npm install strapi-plugin-tanstack-ai
 ```
 
-Two packages, and the second is a choice: the adapter for the model provider
-the chat should use. `@tanstack/ai-anthropic` sends the conversation to Claude
-and is what `chat.provider` defaults to. `@tanstack/ai-ollama` runs a model on
-your own machine instead, with no key and nothing leaving it. Install exactly
-one; everything else the chat needs ships with the plugin.
+That is the whole install. Both model providers ship with the plugin, so
+choosing between Claude and a local model is a config change rather than
+another package: set `chat.provider` to `anthropic` or `ollama`.
 
-Only want the MCP tools? Install the plugin on its own and set
-`chat: { enabled: false }`.
+Only want the MCP tools? Set `chat: { enabled: false }` and no AI SDK is ever
+loaded.
 
 ---
 

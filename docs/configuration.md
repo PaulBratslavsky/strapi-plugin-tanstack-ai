@@ -52,15 +52,12 @@ act on.
 
 `enabled: true` by default. To use it:
 
-1. Install the adapter for your provider:
-   ```bash
-   npm install @tanstack/ai-anthropic      # or @tanstack/ai-ollama
-   ```
-2. Give that provider its credential: `apiKey` for Anthropic, `baseURL` for
-   Ollama.
+Pick the provider and give it its credential: `apiKey` for Anthropic,
+`baseURL` for Ollama. Both adapters ship with the plugin, so there is nothing
+to install.
 
 Nothing here stops Strapi booting. At boot the plugin checks whether chat can
-actually run (config, credential, and the adapter package) and logs one line:
+actually run (config and credential) and logs one line:
 `chat ENABLED`, `chat disabled`, or a warning such as `chat is on but not
 ready: Chat uses Anthropic but has no API key…`. The TanStack AI page shows the
 same reason as a setup notice instead of a chat that fails on the first

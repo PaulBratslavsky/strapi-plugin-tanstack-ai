@@ -1,5 +1,46 @@
 # Changelog
 
+## 1.6.0 - 2026-09-26
+
+Both provider adapters now ship with the plugin, at exact versions, and no
+`@tanstack/*` package is a peer dependency any more. The install is one line:
+
+```bash
+npm install strapi-plugin-tanstack-ai
+```
+
+Choosing between Claude and a local model is now a config change rather than
+another package.
+
+### Why: the optional peers produced a silently broken install
+
+`@tanstack/ai-anthropic` was an optional peer at `^0.18.0`. Its own peer
+requirement on the SDK moved while the plugin's did not:
+
+| adapter | needs `@tanstack/ai` |
+|---|---|
+| `ai-anthropic@0.18.3` | `^0.52.0` |
+| `ai-anthropic@0.18.10` | `^0.58.0` |
+| `ai-anthropic@0.18.13` | `^0.59.0` |
+
+So `npm install strapi-plugin-tanstack-ai @tanstack/ai-anthropic` resolved the
+newest in range, and the install **succeeded** with two SDK copies:
+
+```
+0.52.3  node_modules/strapi-plugin-tanstack-ai/node_modules/@tanstack/ai
+0.59.0  node_modules/@tanstack/ai
+```
+
+The plugin built an adapter against one and called `chat()` from the other: a
+silent version mismatch rather than an error, which is the worst kind. Pinning
+the whole set inside the plugin makes the graph unable to split. A clean
+install of 1.6.0 alone yields exactly one `@tanstack/ai`.
+
+The seam is unchanged. The SDK and the adapters are still reached only through
+a dynamic `import()` behind `chat.enabled`, only the configured provider's
+adapter is ever imported, and `check:seam` still proves no static require
+survives the build.
+
 ## 1.5.1 - 2026-09-26
 
 Documentation only, no code change.
