@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.5.1 - 2026-09-26
+
+Documentation only, no code change.
+
+The 1.5.0 README still showed the install as two separate blocks, the plugin
+in one and the adapter in the other, so the command a chat user actually runs
+never appeared whole:
+
+```bash
+npm install strapi-plugin-tanstack-ai @tanstack/ai-ollama
+```
+
+The install section now leads with that line, says the second package is a
+choice between a local model and Claude, and keeps the tools-only install as
+the variant rather than the headline.
+
 ## 1.5.0 - 2026-09-26
 
 `@tanstack/ai` and `@tanstack/ai-react` are now ordinary dependencies of this
