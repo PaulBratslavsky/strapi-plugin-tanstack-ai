@@ -1,5 +1,5 @@
 {
-  "version": "1.4.0",
+  "version": "1.5.0",
   "keywords": [
     "strapi",
     "strapi-plugin",
@@ -88,10 +88,8 @@
     "@strapi/icons": "^2.0.0",
     "@strapi/strapi": "^5.47.0",
     "@strapi/utils": "^5.47.0",
-    "@tanstack/ai": "^0.52.0",
     "@tanstack/ai-anthropic": "^0.18.0",
     "@tanstack/ai-ollama": "^0.10.0",
-    "@tanstack/ai-react": "^0.22.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-intl": "^6.6.0",
@@ -109,12 +107,6 @@
   "license": "MIT",
   "author": "Paul Bratslavsky <paul.bratslavsky@strapi.io>",
   "peerDependenciesMeta": {
-    "@tanstack/ai": {
-      "optional": true
-    },
-    "@tanstack/ai-react": {
-      "optional": true
-    },
     "@tanstack/ai-anthropic": {
       "optional": true
     },
@@ -123,6 +115,8 @@
     }
   },
   "dependencies": {
+    "@tanstack/ai": "^0.52.0",
+    "@tanstack/ai-react": "^0.22.4",
     "react-markdown": "^9.0.0",
     "remark-gfm": "^4.0.0"
   },

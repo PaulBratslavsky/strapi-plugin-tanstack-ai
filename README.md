@@ -112,6 +112,13 @@ tools. That is not an error — a host may install this for the admin chat alone
 npm install strapi-plugin-tanstack-ai
 ```
 
+That is everything the MCP tools need. For the chat, add the adapter for your
+provider, which is the one package the plugin cannot choose for you:
+
+```bash
+npm install @tanstack/ai-ollama      # or @tanstack/ai-anthropic
+```
+
 Then **grant the tool permissions**, which is not optional — see below.
 
 ---
@@ -286,10 +293,11 @@ no number at all.
 
 `enabled: true` by default (since 1.3.0). To use it:
 
-1. Install the optional peers you need:
+1. Install the adapter for your provider. Since 1.5.0 the SDK itself
+   (`@tanstack/ai`, `@tanstack/ai-react`) comes with the plugin; only the
+   adapters are optional peers, because you pick exactly one:
    ```bash
-   npm install @tanstack/ai @tanstack/ai-react react-markdown remark-gfm
-   npm install @tanstack/ai-anthropic   # or @tanstack/ai-ollama
+   npm install @tanstack/ai-ollama      # or @tanstack/ai-anthropic
    ```
 2. Give the provider its credential: `apiKey` for Anthropic, `baseURL` for Ollama.
 
@@ -317,8 +325,8 @@ text fields. Check the token's grid for MCP, or the admin's role for the chat.
 See *What each tool can read*.
 
 **`chat is enabled but @tanstack/ai could not be loaded`.**
-The optional peer is not installed in the host app. The message names the exact
-`npm install` to run.
+The provider's adapter package is not installed in the host app. The message
+names the exact `npm install` to run.
 
 **The TanStack AI page shows a setup notice instead of the chat.**
 Chat is off, or cannot run yet. The notice names the setting or package to add;
