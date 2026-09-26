@@ -7,9 +7,16 @@
  * wanted chat, would pay for an ESM module graph it never uses and would
  * crash on boot if anything in it failed to resolve.
  *
- * Since 1.5.0 the SDK ships as a normal dependency, so it is present on disk.
- * That changes nothing here: present is not loaded. The provider adapters are
- * still OPTIONAL peers and may genuinely be absent.
+ * Since 1.6.0 the SDK and both provider adapters ship as normal dependencies,
+ * at exact versions, so the plugin owns one coherent set. That changes nothing
+ * here: present on disk is not loaded, and a tools-only host still pays
+ * nothing.
+ *
+ * They are pinned rather than ranged because an adapter's peer requirement
+ * moves independently of the SDK. With `^0.18.0`, npm installed
+ * `@tanstack/ai-anthropic@0.18.13`, which needs `@tanstack/ai@^0.59.0`, beside
+ * the plugin's own 0.52 — the install SUCCEEDED and produced two SDK copies,
+ * with the adapter built against one and `chat()` called from the other.
  *
  * A dynamic `import()` from CJS is the supported bridge, and it costs nothing
  * ergonomically here because every consumer is already async.
@@ -69,13 +76,9 @@ export async function loadAI(): Promise<typeof import('@tanstack/ai')> {
 /**
  * The chat adapter for a provider, loaded the same lazy way.
  *
- * The adapters live in SEPARATE packages — `@tanstack/ai-anthropic`,
- * `@tanstack/ai-ollama` — so they are optional peers too, and the import has
- * to be behind the same gate. Importing both eagerly to pick one at runtime
- * would defeat the point: a host that only ever uses Ollama would still need
- * the Anthropic package installed.
- *
- * Only the selected provider's package is touched.
+ * The adapters live in SEPARATE packages, and only the selected provider's is
+ * imported. Importing both eagerly to pick one at runtime would load the
+ * Anthropic client into a host that only ever talks to Ollama.
  */
 export async function loadAdapter(config: {
   provider: 'anthropic' | 'ollama';
@@ -121,8 +124,9 @@ async function importOrExplain<T extends string>(specifier: T) {
     const detail = error instanceof Error ? error.message : String(error);
     throw new Error(
       `[tanstack-ai] chat is enabled but ${specifier} could not be loaded. ` +
-        `It is an optional peer dependency, so install it in the host app: ` +
-        `npm install ${specifier}. Original error: ${detail}`,
+        `It ships with this plugin, so this usually means a broken install: ` +
+        `reinstall the host app's dependencies (npm install). ` +
+        `Original error: ${detail}`,
       { cause: error },
     );
   }

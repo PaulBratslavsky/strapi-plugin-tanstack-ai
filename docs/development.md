@@ -41,9 +41,9 @@ npx create-strapi-app@5 clean --non-interactive --no-run --typescript \
 cd clean
 npm install /path/to/strapi-plugin-tanstack-ai-<version>.tgz
 
-ls node_modules/@tanstack/    # expect: ai, ai-react. No provider adapter.
+npm ls @tanstack/ai           # expect: exactly one version, 0.52.3
 # add `mcp: { enabled: true }` to config/server.ts, then:
-npm run build                 # the host's admin must build with NO adapter present
+npm run build                 # the host's admin must build
 npm run start
 ```
 
@@ -57,7 +57,7 @@ A pass looks like:
 
 and `GET /tanstack-ai/config` returning `"ready": false` with that reason.
 
-Three real defects were found this way, none of them visible from a linked
+Four real defects were found this way, none of them visible from a linked
 development setup, because `resolve:` bypasses npm resolution and the host's
 admin build entirely:
 
@@ -70,3 +70,8 @@ admin build entirely:
    that stub exports nothing named, so a tools-only host could not build its
    admin panel at all. The panel now uses a namespace import, which binds
    nothing statically and resolves against the stub or the real package alike.
+4. The Anthropic adapter was an optional peer at `^0.18.0`. npm installed
+   0.18.13, which needs `@tanstack/ai@^0.59.0`, beside the plugin's 0.52, and
+   the install succeeded with two SDK copies. `npm ls @tanstack/ai` showing
+   more than one version is the check for this, which is why it is above. The
+   fix in 1.6.0 was to ship the adapters as pinned dependencies.
