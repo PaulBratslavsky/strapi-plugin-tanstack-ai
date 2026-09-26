@@ -1,5 +1,39 @@
 # Changelog
 
+## 1.4.0 - 2026-09-26
+
+The chat can now offer tools the APPLICATION provides, not only tools from
+installed plugins.
+
+Strapi's MCP server already accepts a tool registered in an app's
+`src/index.ts`, so a project can put a one-off tool on `/mcp` without
+scaffolding a plugin. The chat could not see those, which made the split an
+implementation detail rather than a decision. A project now names the services
+it wants offered:
+
+```ts
+'tanstack-ai': {
+  config: {
+    chat: {
+      toolSources: ['api::healthcheck.healthcheck'],
+    },
+  },
+}
+```
+
+Each listed service exposes the same contract a contributing plugin does —
+`getTools()`, optionally `getMeta()` — and each tool declares the admin
+permission action gating it, which the chat checks against the caller's role
+exactly as it does for a plugin's tools. Tools are namespaced `<source>__<tool>`
+the same way.
+
+LISTED, NEVER SCANNED: discovering app services by naming convention would put
+tools in the chat that nothing in the config accounts for. Plugins remain the
+primary way to ship tools — they own their permissions and can be installed
+elsewhere; this is for the one-off a project keeps to itself.
+
+Defaults to `[]`, so nothing changes for an existing install.
+
 ## 1.3.1 - 2026-09-22
 
 Fixes the admin chat failing with an Anthropic 400 on the message after a tool

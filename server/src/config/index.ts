@@ -57,6 +57,24 @@ export interface ChatConfig {
   apiKey?: string;
   /** Ollama only. */
   baseURL?: string;
+  /**
+   * Services in the HOST APPLICATION that contribute chat tools, by uid:
+   *
+   *   toolSources: ['api::healthcheck.healthcheck']
+   *
+   * Each named service exposes the same contract a contributing plugin does —
+   * `getTools()`, optionally `getMeta()` — and each tool declares the admin
+   * permission action gating it. Strapi's MCP server already accepts a tool
+   * registered in the app's `src/index.ts`; this is how that tool also reaches
+   * the chat, without scaffolding a plugin for it.
+   *
+   * LISTED, NEVER SCANNED. Discovering app services by a naming convention
+   * would put tools in the chat that nothing in the config accounts for.
+   * Plugins stay the primary way to ship tools — they own their permissions
+   * and can be installed elsewhere; this is for the one-off a project keeps to
+   * itself.
+   */
+  toolSources?: string[];
 }
 
 export interface PluginConfig {
@@ -79,6 +97,7 @@ const defaults: PluginConfig = {
     enabled: true,
     provider: 'anthropic',
     model: 'claude-sonnet-5',
+    toolSources: [],
   },
 };
 
@@ -100,6 +119,14 @@ export default {
       throw new Error(
         `[tanstack-ai] chat.provider must be 'anthropic' or 'ollama', got ${String(chat.provider)}`,
       );
+    }
+
+    const sources = chat?.toolSources;
+    if (
+      sources !== undefined &&
+      (!Array.isArray(sources) || sources.some((uid) => typeof uid !== 'string'))
+    ) {
+      throw new Error('[tanstack-ai] chat.toolSources must be an array of service uids');
     }
 
     const mcp = config.mcp;

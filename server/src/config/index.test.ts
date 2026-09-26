@@ -72,3 +72,24 @@ describe('validator', () => {
     expect(() => validator({ mcp: { toolPrefix: '', sizeLimitBytes: 0 } })).toThrow(/positive/);
   });
 });
+
+describe('chat.toolSources', () => {
+  it('defaults to none: no app service contributes unless a project says so', () => {
+    expect(defaults.chat.toolSources).toEqual([]);
+  });
+
+  it('accepts a list of service uids', () => {
+    expect(() =>
+      validator({ chat: { ...defaults.chat, toolSources: ['api::healthcheck.healthcheck'] } }),
+    ).not.toThrow();
+  });
+
+  it('rejects anything that is not a list of strings', () => {
+    expect(() => validator({ chat: { ...defaults.chat, toolSources: 'api::x.x' as never } })).toThrow(
+      /toolSources/,
+    );
+    expect(() => validator({ chat: { ...defaults.chat, toolSources: [42 as never] } })).toThrow(
+      /toolSources/,
+    );
+  });
+});
