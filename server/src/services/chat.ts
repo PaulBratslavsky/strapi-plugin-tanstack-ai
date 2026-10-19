@@ -113,7 +113,9 @@ export async function buildPreamble(
     ? await memoryPreamble(strapi, options.adminUserId)
     : '';
 
-  const composed = `${options?.system ?? ''}${toolNote}${memories}`.trim();
+  // The operator's standing instructions, unless this request brought its own.
+  const base = options?.system ?? readConfig(strapi).chat.systemPrompt ?? '';
+  const composed = `${base}${toolNote}${memories}`.trim();
   return { system: composed.length > 0 ? composed : undefined, tools };
 }
 

@@ -75,6 +75,12 @@ export interface ChatConfig {
    * itself.
    */
   toolSources?: string[];
+  /**
+   * Instructions put at the top of every chat turn's system prompt, before the
+   * tool note and the caller's memories. Optional. A `system` sent with a
+   * single request replaces it for that request.
+   */
+  systemPrompt?: string;
 }
 
 export interface PluginConfig {
@@ -127,6 +133,10 @@ export default {
       (!Array.isArray(sources) || sources.some((uid) => typeof uid !== 'string'))
     ) {
       throw new Error('[tanstack-ai] chat.toolSources must be an array of service uids');
+    }
+
+    if (chat?.systemPrompt !== undefined && typeof chat.systemPrompt !== 'string') {
+      throw new Error('[tanstack-ai] chat.systemPrompt must be a string');
     }
 
     const mcp = config.mcp;
