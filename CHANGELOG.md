@@ -1,5 +1,102 @@
 # Changelog
 
+## 1.7.0 - 2026-10-18
+
+Five more tools, ported from `strapi-plugin-ai-chat` so a host can drop that
+plugin and keep everything it used. They keep the same names and the same
+arguments, so prompts carry over unchanged. The result shapes are different
+(see below), so a client that reads results needs a small change:
+
+- `find_one_content`: one document by its `documentId`, relations populated.
+- `create_content`: a new document, a draft unless `status` is `"published"`
+  on a type with draft and publish.
+- `update_content`: change fields on an existing document.
+- `upload_media`: fetch a public URL into the media library.
+- `send_email`: send an HTML email through the host's email provider.
+
+Each one has its own permission action, `plugin::tanstack-ai.tool.<name>` with
+dashes (for example `tool.find-one-content`), so there are now eight actions
+and the boot log reads `registered 8/8 MCP tool(s)`. Grant the new ones to the
+roles and admin tokens that need them. If both plugins are enabled on one
+host, the tool names collide: set `mcp.toolPrefix` here, or disable one of
+the two plugins.
+
+### Behaviour differences from ai-chat: result shapes and publishing
+
+The tool names and arguments match ai-chat's, but the **results do not**.
+ai-chat's content tools returned `{ action, document }`. These return
+`{ contentType, documentId, data }`. `upload_media` returns `{ file, usage }`
+and `send_email` returns `{ sent, to, subject }`.
+
+`create_content` with `status: "published"` now saves a draft first, checks
+Publish against the saved document, and then publishes. If publishing is
+refused, the draft stays saved and the error says so and names its
+`documentId`. On a type without draft and publish, `create_content` and
+`update_content` accept `status` and ignore it, as the document service does,
+and do not ask for the Publish permission (the permissions grid offers none on
+such types).
+
+### Behaviour difference from ai-chat: the caller's permissions now apply
+
+ai-chat's versions of these tools did not check who was calling. These do. The
+content tools run as the caller and enforce Content Manager **Read**,
+**Create** and **Update** on the type, plus **Publish** for
+`status: "published"` on a type with draft and publish. Permission conditions such as "only entries I created"
+apply, fields the caller cannot write are dropped from the input, and fields
+they cannot read are left out of the result. A document that does not exist and
+one a condition hides get the same "not found" answer. New and changed rows
+record the caller as creator and updater.
+
+So a token that worked with ai-chat's grants may now be refused until it also
+holds the Content Manager permissions for the types it touches. Tick them on
+the admin token, or on the role for the chat.
+
+### `upload_media` is stricter about what it will fetch
+
+It needs `plugin::upload.assets.create` (the media library's own upload
+permission) as well as its action, and it refuses to be a way into the
+network behind the server:
+
+- The hostname is resolved and private and reserved addresses are refused. The
+  check is pinned to the connection that is actually made, so a name that
+  answers differently between the lookup and the connect (DNS rebinding) is
+  still refused.
+- Redirects are refused.
+- The download is streamed under a 50 MB cap, which also holds for gzip and
+  chunked responses where the declared length is missing or wrong.
+- The operator's `plugin::upload.security` `allowedTypes` and `deniedTypes`
+  apply, to both the response's Content-Type and, when it is a known type, the
+  file name's extension. A built-in deny-list applies whatever the config says,
+  because the media library serves those files from the site's own origin. As
+  types it covers html, xhtml, svg, javascript, shell scripts and the XML
+  family (xml, xslt, `multipart/related`, `message/rfc822`, HTML Components).
+  As extensions it covers html, htm, xhtml, xht, shtml, svg, svgz, js, mjs,
+  cjs, sh, php, xml, xsl, xslt, mht, mhtml and htc. php is refused by its
+  extension only.
+- The file is staged on disk under a fixed temporary name, so the name the
+  model asks for is only a label. The caller is recorded as its creator.
+
+It identifies itself with a User-Agent header, because some hosts refuse
+anonymous downloads.
+
+`send_email` is gated only by its own action, since Content Manager has no
+permission for sending mail. Grant it deliberately. A failure now comes back as
+an error rather than as `success: false` data, so the chat reports it as a
+failure instead of describing it as a result.
+
+### `chat.systemPrompt`
+
+A new optional setting for standing instructions to the assistant:
+
+```ts
+chat: { systemPrompt: env('AI_SYSTEM_PROMPT') }
+```
+
+It sits first in the system prompt, ahead of the tool note and the saved
+memories. A per-request `system` replaces it, and the context badge measures it
+with the rest of the preamble. A value that is not a string is rejected at
+boot.
+
 ## 1.6.0 - 2026-09-26
 
 Both provider adapters now ship with the plugin, at exact versions, and no

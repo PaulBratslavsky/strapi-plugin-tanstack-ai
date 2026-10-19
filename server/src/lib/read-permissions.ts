@@ -68,6 +68,14 @@ export function createReadCheckers(strapi: Core.Strapi, userAbility: UserAbility
   };
 }
 
+/** Every content type Content Manager displays: the rows of the permissions grid, before any grant is applied. */
+export function displayedContentTypes(strapi: Core.Strapi): string[] {
+  const service = strapi.plugin('content-manager').service('content-types') as {
+    findDisplayedContentTypes: () => Array<{ uid: string }>;
+  };
+  return service.findDisplayedContentTypes().map((contentType) => contentType.uid);
+}
+
 /**
  * The content types a caller can read — the rows of the permissions grid.
  *
@@ -89,10 +97,7 @@ export function readableContentTypes(
   strapi: Core.Strapi,
   checkerFor: (uid: string) => ReadChecker,
 ): { displayed: string[]; readable: string[] } {
-  const service = strapi.plugin('content-manager').service('content-types') as {
-    findDisplayedContentTypes: () => Array<{ uid: string }>;
-  };
-  const displayed = service.findDisplayedContentTypes().map((contentType) => contentType.uid);
+  const displayed = displayedContentTypes(strapi);
   const readable = displayed.filter((uid) => !checkerFor(uid).cannot.read());
   return { displayed, readable };
 }
@@ -107,6 +112,16 @@ export function readableContentTypes(
 export function abilityFrom(context: unknown): UserAbility | undefined {
   return (context as { userAbility?: UserAbility } | undefined)?.userAbility;
 }
+
+/**
+ * The caller's admin id from an MCP handler context, or undefined. The admin
+ * chat passes id 0 when it has none, and that must never be stamped as a
+ * creator, so anything that is not a positive number counts as absent.
+ */
+export const callerId = (context: unknown): number | undefined => {
+  const id = (context as { user?: { id?: unknown } } | undefined)?.user?.id;
+  return typeof id === 'number' && id > 0 ? id : undefined;
+};
 
 /**
  * The one answer for a content type the caller cannot use.

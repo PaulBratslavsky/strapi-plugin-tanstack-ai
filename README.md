@@ -28,7 +28,7 @@ The plugin has two halves, gated separately, and the split is the whole design:
 
 | Half | Default | Needs an AI SDK? |
 |---|---|---|
-| **MCP tools** — `list_content_types`, `search_content`, `aggregate_content`, contributed to Strapi's official [MCP server](https://docs.strapi.io/cms/features/strapi-mcp-server) | always on | no |
+| **MCP tools** — eight of them (listed below), contributed to Strapi's official [MCP server](https://docs.strapi.io/cms/features/strapi-mcp-server) | always on | no |
 | **Chat** — a panel inside the admin, driving those same tools | on | yes, and only then |
 
 Install it for the tools alone and **no AI SDK is ever loaded**. The SDK and
@@ -61,6 +61,30 @@ about a type, it is about the library.
   (`required`, `maxLength`, `enum`, `default`). A model told only that a field
   exists will send 90 characters to a column capped at 80 and burn its one
   attempt on the rejected write.
+
+### The tools
+
+| Tool | What it does |
+|---|---|
+| `list_content_types` | The schema, with each field's constraints |
+| `search_content` | Search one type or every type the caller can read |
+| `aggregate_content` | Counts and breakdowns without fetching documents |
+| `find_one_content` | One document by its exact `documentId`, relations populated |
+| `create_content` | A new document, saved as a draft unless `status: "published"` (on types with draft and publish) |
+| `update_content` | Change fields on an existing document |
+| `upload_media` | Fetch a public URL into the media library |
+| `send_email` | Send an HTML email through the host's email provider |
+
+The last five are ported from `strapi-plugin-ai-chat` with the same names and
+arguments, so a host can drop that plugin. The content tools run **as the
+caller**: they enforce Content Manager Read, Create, Update and (for
+`status: "published"` on a type with draft and publish) Publish on the type, so
+a caller can only touch what their role or token could touch in the admin.
+Their results are shaped differently from ai-chat's; see the
+[changelog](CHANGELOG.md). `upload_media` also needs the
+media library's upload permission. `send_email` is gated only by its own
+action, so grant it deliberately. Details are in
+[Permissions](docs/permissions.md).
 
 ---
 
@@ -122,7 +146,7 @@ loaded.
 3. **Restart Strapi** and read one line of the boot log:
 
    ```
-   [tanstack-ai] registered 3/3 MCP tool(s)
+   [tanstack-ai] registered 8/8 MCP tool(s)
    [tanstack-ai] chat ENABLED
    ```
 
@@ -138,7 +162,7 @@ Open **TanStack AI** in the admin menu and ask it something about your content.
 
 | | |
 |---|---|
-| [Permissions](docs/permissions.md) | Which action gates which tool, and how the Content Manager grid decides what a caller can read |
+| [Permissions](docs/permissions.md) | Which action gates which tool, what else the content, upload and email tools check, and how the Content Manager grid decides what a caller can read |
 | [Configuration](docs/configuration.md) | Every option under `mcp.*` and `chat.*` |
 | [The chat panel](docs/chat.md) | History, memory, notes, and what the context badge means |
 | [Extending the chat](docs/extending.md) | Contributing tools from another plugin, or from your own app |

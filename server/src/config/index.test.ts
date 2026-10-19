@@ -71,6 +71,16 @@ describe('validator', () => {
     // a confusing way to discover a typo.
     expect(() => validator({ mcp: { toolPrefix: '', sizeLimitBytes: 0 } })).toThrow(/positive/);
   });
+
+  it('accepts a string chat.systemPrompt', () => {
+    expect(() => validator({ chat: { ...defaults.chat, systemPrompt: 'Be brief.' } })).not.toThrow();
+  });
+
+  it('rejects a non-string chat.systemPrompt', () => {
+    // A number or object here would be String()-ed into the prompt as
+    // "[object Object]", silently replacing the operator's instructions.
+    expect(() => validator({ chat: { ...defaults.chat, systemPrompt: 42 as never } })).toThrow(/systemPrompt/);
+  });
 });
 
 describe('chat.toolSources', () => {

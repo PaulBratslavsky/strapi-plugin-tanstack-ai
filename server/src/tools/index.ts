@@ -1,8 +1,13 @@
 import type { Core, Modules } from '@strapi/strapi';
 import { oversizeNotice } from '../lib/size-guard';
 import { aggregateContent } from './aggregate-content';
+import { createContent } from './create-content';
+import { findOneContent } from './find-one-content';
 import { listContentTypes } from './list-content-types';
 import { searchContent } from './search-content';
+import { sendEmail } from './send-email';
+import { updateContent } from './update-content';
+import { uploadMedia } from './upload-media';
 
 /**
  * The tool registry — ONE list, read by both `bootstrap` (which registers the
@@ -15,7 +20,16 @@ import { searchContent } from './search-content';
  * failure this plugin has already paid for once. Now there is nothing to keep
  * in step.
  */
-export const ALL_TOOLS = [listContentTypes, searchContent, aggregateContent];
+export const ALL_TOOLS = [
+  listContentTypes,
+  searchContent,
+  aggregateContent,
+  findOneContent,
+  createContent,
+  updateContent,
+  uploadMedia,
+  sendEmail,
+];
 
 /** A tool's own name, before any configured prefix. */
 export const toolNames = (): string[] => ALL_TOOLS.map((tool) => tool.name);
