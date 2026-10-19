@@ -8,7 +8,7 @@ import nodePath from 'node:path';
 import { actionForTool } from '../lib/tool-permissions';
 import { abilityFrom } from '../lib/read-permissions';
 import { guardedFetch, type Fetcher } from '../lib/guarded-fetch';
-import { mimeRefusal, normalizeMime, type UploadSecurity } from '../lib/mime-rules';
+import { mimeRefusal, nameRefusal, normalizeMime, type UploadSecurity } from '../lib/mime-rules';
 import { assertPublicUrl } from '../lib/public-url';
 import { callerId } from './create-content';
 import { errorResult, okResult } from './results';
@@ -102,6 +102,16 @@ async function cancelQuietly(reader: ReadableStreamDefaultReader<Uint8Array>) {
   }
 }
 
+/** Why this response must not be stored, judged before any of the body is read. */
+function responseRefusal(response: Response, filename: string, security?: UploadSecurity): string | undefined {
+  if (response.status >= 300 && response.status < 400) {
+    return 'That URL redirects, and redirects are refused. Pass the final URL instead.';
+  }
+  if (!response.ok) return `Fetching the file failed: ${response.status} ${response.statusText}`;
+  // The type is only half of what decides how the file is served: its extension is the other.
+  return mimeRefusal(response.headers.get('content-type'), security) ?? nameRefusal(filename, security);
+}
+
 const mb = (bytes: number) => `${Math.round((bytes / 1024 / 1024) * 100) / 100} MB`;
 
 export const uploadMedia = ai.mcp.defineTool({
@@ -144,17 +154,11 @@ export const uploadMedia = ai.mcp.defineTool({
     let dir: string | undefined;
     try {
       const response = await (deps.fetch ?? guardedFetch)(url, { signal: controller.signal });
-      if (response.status >= 300 && response.status < 400) {
-        return errorResult('That URL redirects, and redirects are refused. Pass the final URL instead.');
-      }
-      if (!response.ok) {
-        return errorResult(`Fetching the file failed: ${response.status} ${response.statusText}`);
-      }
-
-      const mime = normalizeMime(response.headers.get('content-type'));
       const security = strapi.config.get('plugin::upload.security') as UploadSecurity | undefined;
-      const refusal = mimeRefusal(mime, security);
+      const filename = displayName(args.name, url);
+      const refusal = responseRefusal(response, filename, security);
       if (refusal) return errorResult(refusal);
+      const mime = normalizeMime(response.headers.get('content-type'));
 
       // The declared length is only an early exit: it can be absent, wrong, or
       // the COMPRESSED size. The running count below is what enforces the cap.
@@ -177,7 +181,7 @@ export const uploadMedia = ai.mcp.defineTool({
         .upload(
           {
             data: { fileInfo },
-            files: { filepath, originalFilename: displayName(args.name, url), mimetype: mime, size },
+            files: { filepath, originalFilename: filename, mimetype: mime, size },
           },
           id ? { user: { id } } : undefined,
         )) as Array<{ id: number; name: string; url: string; mime: string; size: number }>;
@@ -192,6 +196,8 @@ export const uploadMedia = ai.mcp.defineTool({
       // A refusal is a result, never a throw: the model gets the reason, not a stack.
       return errorResult(`Uploading from that URL failed: ${(error as Error).message}`);
     } finally {
+      // Abort on every exit: an early refusal must not leave a hostile server holding the socket open.
+      controller.abort();
       clearTimeout(timer);
       if (dir) await rm(dir, { recursive: true, force: true });
     }

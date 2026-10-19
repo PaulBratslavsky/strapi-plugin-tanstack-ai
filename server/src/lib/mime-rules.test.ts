@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mimeRefusal, normalizeMime } from './mime-rules';
+import { extensionOf, mimeRefusal, nameRefusal, normalizeMime } from './mime-rules';
 
 describe('normalizeMime', () => {
   it('strips parameters and lowercases', () => {
@@ -43,5 +43,38 @@ describe('mimeRefusal', () => {
   });
   it('lets deny win over allow', () => {
     expect(mimeRefusal('image/gif', { allowedTypes: ['image/*'], deniedTypes: ['image/gif'] })).toMatch(/blocked/);
+  });
+});
+
+describe('extensionOf', () => {
+  it.each([
+    ['photo.PNG', 'png'],
+    ['a.b.html', 'html'],
+    ['noextension', ''],
+    ['trailing.', ''],
+  ])('%s -> %j', (name, extension) => expect(extensionOf(name)).toBe(extension));
+});
+
+describe('nameRefusal', () => {
+  it.each(['x.html', 'x.HTM', 'x.xhtml', 'x.shtml', 'x.svg', 'x.svgz', 'x.js', 'x.mjs', 'x.cjs', 'x.sh', 'x.php', 'a.b.HTML'])(
+    'always refuses %s, with no config',
+    (name) => expect(nameRefusal(name)).toMatch(/not accepted/),
+  );
+  it('allows ordinary names, in any case, and names with no extension', () => {
+    expect(nameRefusal('photo.PNG')).toBeUndefined();
+    expect(nameRefusal('report.pdf')).toBeUndefined();
+    expect(nameRefusal('upload')).toBeUndefined();
+    expect(nameRefusal('archive.tar.gz')).toBeUndefined();
+  });
+  it('checks a known extension, as the type it is served as, against the operator rules', () => {
+    expect(nameRefusal('clip.mp4', { allowedTypes: ['image/*'] })).toMatch(/not allowed/);
+    expect(nameRefusal('photo.jpeg', { allowedTypes: ['image/*'] })).toBeUndefined();
+    expect(nameRefusal('song.mp3', { deniedTypes: ['audio/*'] })).toMatch(/blocked/);
+  });
+  it('ignores an extension it does not know when no list is configured', () => {
+    expect(nameRefusal('data.xyz', { allowedTypes: ['image/*'] })).toBeUndefined();
+  });
+  it('does not treat inherited object keys as extensions', () => {
+    expect(nameRefusal('x.constructor', { allowedTypes: ['image/*'] })).toBeUndefined();
   });
 });

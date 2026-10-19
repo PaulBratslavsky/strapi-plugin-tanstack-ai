@@ -22,6 +22,25 @@ const ALWAYS_DENIED = new Set([
   'application/x-sh',
 ]);
 
+/**
+ * Strapi stores the file under the extension of the name it is given, and the
+ * media library serves it by that extension. So the Content-Type the remote
+ * server claims is not enough: `x.html` sent as image/png would be stored and
+ * served as HTML. These extensions are refused whatever the config says...
+ */
+const ALWAYS_DENIED_EXTENSIONS = new Set(['html', 'htm', 'xhtml', 'xht', 'shtml', 'svg', 'svgz', 'js', 'mjs', 'cjs', 'sh', 'php']);
+
+/** ...and a known extension is also checked, as the type it will be served as, against the operator's rules. */
+const EXTENSION_MIME: Record<string, string> = {
+  png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', avif: 'image/avif',
+  ico: 'image/x-icon', bmp: 'image/bmp', tif: 'image/tiff', tiff: 'image/tiff', svg: 'image/svg+xml', svgz: 'image/svg+xml',
+  pdf: 'application/pdf', mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime',
+  mp3: 'audio/mpeg', wav: 'audio/wav', ogg: 'audio/ogg', txt: 'text/plain', csv: 'text/csv',
+  json: 'application/json', xml: 'application/xml', html: 'text/html', htm: 'text/html', xhtml: 'application/xhtml+xml',
+  xht: 'application/xhtml+xml', shtml: 'text/html', js: 'text/javascript', mjs: 'text/javascript', cjs: 'text/javascript',
+  sh: 'application/x-sh', php: 'application/x-httpd-php',
+};
+
 export interface UploadSecurity {
   allowedTypes?: string[];
   deniedTypes?: string[];
@@ -51,4 +70,20 @@ export function mimeRefusal(contentType: string | null | undefined, security?: U
     return `Files of type ${mime} are not allowed by this site's media library settings.`;
   }
   return undefined;
+}
+
+/** The extension of a filename, lowercased, without the dot; '' when there is none. */
+export const extensionOf = (name: string): string => {
+  const dot = name.lastIndexOf('.');
+  return dot === -1 ? '' : name.slice(dot + 1).trim().toLowerCase();
+};
+
+/** Why this FILENAME is refused (by its extension), or undefined. */
+export function nameRefusal(name: string, security?: UploadSecurity): string | undefined {
+  const extension = extensionOf(name);
+  if (ALWAYS_DENIED_EXTENSIONS.has(extension)) {
+    return `Files named .${extension} are not accepted by upload_media.`;
+  }
+  const mime = Object.hasOwn(EXTENSION_MIME, extension) ? EXTENSION_MIME[extension] : undefined;
+  return mime ? mimeRefusal(mime, security) : undefined;
 }

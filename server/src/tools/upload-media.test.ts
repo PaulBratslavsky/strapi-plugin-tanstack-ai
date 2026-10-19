@@ -1,7 +1,9 @@
 /* eslint-disable sonarjs/no-hardcoded-ip -- IP literals are the test inputs */
 import { existsSync } from 'node:fs';
+import net, { type AddressInfo } from 'node:net';
 import nodePath from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { createGuardedFetch } from '../lib/guarded-fetch';
 import { __setUploadDeps, uploadMedia } from './upload-media';
 import { errorText, fakeContentStrapi, runTool, structured } from './test-support';
 
@@ -193,5 +195,87 @@ describe('upload_media crafted names', () => {
     expect(files.originalFilename).toBe(expected);
     expect(nodePath.basename(files.filepath)).toBe('upload'); // the on-disk name is fixed
     expect(existsSync(nodePath.dirname(files.filepath))).toBe(false); // and the dir is gone
+  });
+});
+
+describe('upload_media extensions', () => {
+  const run = async (url: string, name: string | undefined, contentType = 'image/png', uploadSecurity?: { allowedTypes?: string[] }) => {
+    __setUploadDeps({
+      fetch: async () => new Response(new Uint8Array([1]), { status: 200, headers: { 'content-type': contentType } }),
+      lookup: publicDns,
+    });
+    const { strapi, calls } = fakeContentStrapi({ uploadSecurity });
+    const result = await runTool(uploadMedia, strapi, name ? { url, name } : { url });
+    return { result, calls };
+  };
+
+  it('refuses name x.html even though the server says image/png', async () => {
+    const { result, calls } = await run('https://example.com/f', 'x.html');
+    expect(result).toMatchObject({ isError: true });
+    expect(uploadCall(calls)).toBeUndefined();
+  });
+  it('refuses a URL path ending .svg even though the server says image/png', async () => {
+    const { result, calls } = await run('https://example.com/logo.svg', undefined);
+    expect(result).toMatchObject({ isError: true });
+    expect(uploadCall(calls)).toBeUndefined();
+  });
+  it('still accepts photo.PNG as image/png', async () => {
+    const { result, calls } = await run('https://example.com/f', 'photo.PNG');
+    expect(result).not.toMatchObject({ isError: true });
+    expect(uploadCall(calls)?.params.files.originalFilename).toBe('photo.PNG');
+  });
+  it('applies the operator allow-list to the extension too', async () => {
+    const { calls } = await run('https://example.com/f', 'clip.mp4', 'image/png', { allowedTypes: ['image/*'] });
+    expect(uploadCall(calls)).toBeUndefined();
+  });
+});
+
+describe('upload_media hostile servers', () => {
+  const ignore = () => {
+    /* a client hanging up on the fixture is expected */
+  };
+  const fixtureLookup = ((_host: string, options: { all?: boolean }, callback: (...args: unknown[]) => void) =>
+    options.all ? callback(null, [{ address: '127.0.0.1', family: 4 }]) : callback(null, '127.0.0.1', 4)) as Parameters<
+    typeof createGuardedFetch
+  >[0];
+
+  it('returns an error result, and does not crash, on a status Response cannot represent', async () => {
+    const server = net.createServer((socket) => {
+      socket.on('error', ignore);
+      socket.once('data', () => socket.end('HTTP/1.1 999 X\r\ncontent-length: 0\r\n\r\n'));
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    try {
+      const { port } = server.address() as AddressInfo;
+      __setUploadDeps({ fetch: createGuardedFetch(fixtureLookup), lookup: publicDns });
+      const { strapi, calls } = fakeContentStrapi();
+      const result = await runTool(uploadMedia, strapi, { url: `http://fixture.test:${port}/x.png` });
+      expect(result).toMatchObject({ isError: true });
+      expect(errorText(result)).toMatch(/999/);
+      expect(uploadCall(calls)).toBeUndefined();
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
+  });
+});
+
+describe('upload_media early refusals', () => {
+  it.each([
+    ['a redirect', 302, 'image/png'],
+    ['a non-2xx', 500, 'image/png'],
+    ['a refused type', 200, 'text/html'],
+  ])('drops the connection on %s', async (_label, status, contentType) => {
+    let signal: AbortSignal | undefined;
+    __setUploadDeps({
+      fetch: async (_url, init) => {
+        signal = init.signal;
+        return new Response(new Uint8Array([1]), { status, headers: { 'content-type': contentType } });
+      },
+      lookup: publicDns,
+    });
+    const { strapi } = fakeContentStrapi();
+    const result = await runTool(uploadMedia, strapi, { url: 'https://example.com/f' });
+    expect(result).toMatchObject({ isError: true });
+    expect(signal?.aborted).toBe(true);
   });
 });
