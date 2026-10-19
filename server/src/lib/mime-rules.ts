@@ -20,6 +20,17 @@ const ALWAYS_DENIED = new Set([
   'application/javascript',
   'text/javascript',
   'application/x-sh',
+  // The XML family: XML and XSLT render as active content in a browser, and
+  // the MIME-wrapper types (MHTML, RFC 822 mail) and HTML Components carry
+  // script. Strapi derives a file's extension from its type when the name has
+  // none, so the types need listing as well as the extensions below.
+  'application/xml',
+  'text/xml',
+  'application/xslt+xml',
+  'text/xsl',
+  'multipart/related',
+  'message/rfc822',
+  'text/x-component',
 ]);
 
 /**
@@ -28,7 +39,7 @@ const ALWAYS_DENIED = new Set([
  * server claims is not enough: `x.html` sent as image/png would be stored and
  * served as HTML. These extensions are refused whatever the config says...
  */
-const ALWAYS_DENIED_EXTENSIONS = new Set(['html', 'htm', 'xhtml', 'xht', 'shtml', 'svg', 'svgz', 'js', 'mjs', 'cjs', 'sh', 'php']);
+const ALWAYS_DENIED_EXTENSIONS = new Set(['html', 'htm', 'xhtml', 'xht', 'shtml', 'svg', 'svgz', 'js', 'mjs', 'cjs', 'sh', 'php', 'xml', 'xsl', 'xslt', 'mht', 'mhtml', 'htc']);
 
 /** ...and a known extension is also checked, as the type it will be served as, against the operator's rules. */
 const EXTENSION_MIME: Record<string, string> = {
@@ -36,7 +47,7 @@ const EXTENSION_MIME: Record<string, string> = {
   ico: 'image/x-icon', bmp: 'image/bmp', tif: 'image/tiff', tiff: 'image/tiff', svg: 'image/svg+xml', svgz: 'image/svg+xml',
   pdf: 'application/pdf', mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime',
   mp3: 'audio/mpeg', wav: 'audio/wav', ogg: 'audio/ogg', txt: 'text/plain', csv: 'text/csv',
-  json: 'application/json', xml: 'application/xml', html: 'text/html', htm: 'text/html', xhtml: 'application/xhtml+xml',
+  json: 'application/json', html: 'text/html', htm: 'text/html', xhtml: 'application/xhtml+xml',
   xht: 'application/xhtml+xml', shtml: 'text/html', js: 'text/javascript', mjs: 'text/javascript', cjs: 'text/javascript',
   sh: 'application/x-sh', php: 'application/x-httpd-php',
 };

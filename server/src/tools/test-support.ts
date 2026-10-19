@@ -22,6 +22,8 @@ export interface FakeContentOptions {
   hiddenFields?: string[];
   /** Types whose update/publish permission is "is creator": refused when the entity carries no createdBy. */
   creatorScoped?: string[];
+  /** Types without draft and publish (the permissions grid offers them no Publish box). The default is that a type has it. */
+  noDraftAndPublish?: string[];
   emailFails?: string;
   noEmailPlugin?: boolean;
   /** The operator's `plugin::upload.security` config. */
@@ -29,7 +31,7 @@ export interface FakeContentOptions {
 }
 
 export function fakeContentStrapi(options: FakeContentOptions = {}) {
-  const { types = [], docs = {}, deny = {}, hiddenFields = [], creatorScoped = [] } = options;
+  const { types = [], docs = {}, deny = {}, hiddenFields = [], creatorScoped = [], noDraftAndPublish = [] } = options;
   const hidden = new Set(hiddenFields);
   const calls: Array<{ op: string; uid?: string; params: unknown; opts?: unknown }> = [];
   const omitHidden = (record: Record<string, unknown>) =>
@@ -57,13 +59,18 @@ export function fakeContentStrapi(options: FakeContentOptions = {}) {
     sanitizedQuery: {
       read: async (query: Record<string, unknown>) => ({ ...query, permissionCondition: true }),
       update: async (query: Record<string, unknown>) => ({ ...query, permissionCondition: true }),
+      publish: async (query: Record<string, unknown>) => ({ ...query, permissionCondition: true }),
     },
     sanitizeOutput: sanitize,
     sanitizeCreateInput: sanitize,
     sanitizeUpdateInput: () => sanitize,
   });
 
-  const findById = (uid: string, id: unknown) => (docs[uid] ?? []).find((doc) => doc.documentId === id);
+  // Documents the fake `create` stored, so a tool can load what it just wrote.
+  const createdDocs: Array<{ uid: string; doc: Record<string, unknown> }> = [];
+  const findById = (uid: string, id: unknown) =>
+    (docs[uid] ?? []).find((doc) => doc.documentId === id) ??
+    createdDocs.find((entry) => entry.uid === uid && entry.doc.documentId === id)?.doc;
 
   // content-manager's populate-builder: records the query, builds a populate
   // that loads createdBy (what the permission conditions read).
@@ -80,6 +87,11 @@ export function fakeContentStrapi(options: FakeContentOptions = {}) {
 
   const strapi = {
     contentTypes: Object.fromEntries(types.map((uid) => [uid, { uid, attributes: {} }])),
+    getModel: (uid: string) => ({
+      uid,
+      attributes: {},
+      options: { draftAndPublish: !noDraftAndPublish.includes(uid) },
+    }),
     documents: (uid: string) => ({
       findFirst: async (params: Record<string, unknown>) => {
         calls.push({ op: 'findFirst', uid, params });
@@ -102,7 +114,13 @@ export function fakeContentStrapi(options: FakeContentOptions = {}) {
       },
       create: async (params: Record<string, unknown>) => {
         calls.push({ op: 'create', uid, params });
-        return { documentId: 'new-doc', ...(params.data as Record<string, unknown>) };
+        const doc = { documentId: 'new-doc', ...(params.data as Record<string, unknown>) };
+        createdDocs.push({ uid, doc });
+        return doc;
+      },
+      publish: async (params: Record<string, unknown>) => {
+        calls.push({ op: 'publish', uid, params });
+        return { documentId: params.documentId, entries: [{ ...findById(uid, params.documentId), publishedAt: 'now' }] };
       },
       update: async (params: Record<string, unknown>) => {
         calls.push({ op: 'update', uid, params });

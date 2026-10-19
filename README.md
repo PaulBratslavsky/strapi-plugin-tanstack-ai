@@ -70,7 +70,7 @@ about a type, it is about the library.
 | `search_content` | Search one type or every type the caller can read |
 | `aggregate_content` | Counts and breakdowns without fetching documents |
 | `find_one_content` | One document by its exact `documentId`, relations populated |
-| `create_content` | A new document, saved as a draft unless `status: "published"` |
+| `create_content` | A new document, saved as a draft unless `status: "published"` (on types with draft and publish) |
 | `update_content` | Change fields on an existing document |
 | `upload_media` | Fetch a public URL into the media library |
 | `send_email` | Send an HTML email through the host's email provider |
@@ -78,8 +78,10 @@ about a type, it is about the library.
 The last five are ported from `strapi-plugin-ai-chat` with the same names and
 arguments, so a host can drop that plugin. The content tools run **as the
 caller**: they enforce Content Manager Read, Create, Update and (for
-`status: "published"`) Publish on the type, so a caller can only touch what
-their role or token could touch in the admin. `upload_media` also needs the
+`status: "published"` on a type with draft and publish) Publish on the type, so
+a caller can only touch what their role or token could touch in the admin.
+Their results are shaped differently from ai-chat's; see the
+[changelog](CHANGELOG.md). `upload_media` also needs the
 media library's upload permission. `send_email` is gated only by its own
 action, so grant it deliberately. Details are in
 [Permissions](docs/permissions.md).

@@ -6,11 +6,10 @@ import { mkdtemp, open, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import nodePath from 'node:path';
 import { actionForTool } from '../lib/tool-permissions';
-import { abilityFrom } from '../lib/read-permissions';
+import { abilityFrom, callerId } from '../lib/read-permissions';
 import { guardedFetch, type Fetcher } from '../lib/guarded-fetch';
 import { mimeRefusal, nameRefusal, normalizeMime, type UploadSecurity } from '../lib/mime-rules';
 import { assertPublicUrl } from '../lib/public-url';
-import { callerId } from './create-content';
 import { errorResult, okResult } from './results';
 
 /**

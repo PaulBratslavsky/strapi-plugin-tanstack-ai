@@ -33,6 +33,11 @@ export default ({ env }) => ({
 Prefixes the MCP-visible tool names. Empty by default, since no tool here
 collides with a Strapi built-in. Set it if another plugin claims the same name.
 
+In particular, `find_one_content`, `create_content`, `update_content`,
+`upload_media` and `send_email` collide with the tools of the same names in
+`strapi-plugin-ai-chat` when both plugins are enabled. Set a prefix here, or
+disable one of the two plugins.
+
 Changing the prefix **does not move the permission actions**, which stay keyed
 to the bare tool name. If they moved, setting a prefix would silently orphan
 every existing grant: the tool would vanish from `tools/list` while the

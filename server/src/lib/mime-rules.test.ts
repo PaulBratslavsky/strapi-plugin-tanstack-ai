@@ -15,7 +15,8 @@ describe('mimeRefusal', () => {
   it('allows anything when nothing is configured', () => {
     expect(mimeRefusal('image/png')).toBeUndefined();
   });
-  it.each(['text/html', 'application/xhtml+xml', 'image/svg+xml', 'application/javascript', 'text/javascript', 'application/x-sh'])(
+  it.each(['text/html', 'application/xhtml+xml', 'image/svg+xml', 'application/javascript', 'text/javascript', 'application/x-sh',
+    'application/xml', 'text/xml', 'application/xslt+xml', 'text/xsl', 'multipart/related', 'message/rfc822', 'text/x-component'])(
     'always refuses %s, with no config at all',
     (type) => expect(mimeRefusal(type)).toMatch(/not accepted/),
   );
@@ -56,7 +57,7 @@ describe('extensionOf', () => {
 });
 
 describe('nameRefusal', () => {
-  it.each(['x.html', 'x.HTM', 'x.xhtml', 'x.shtml', 'x.svg', 'x.svgz', 'x.js', 'x.mjs', 'x.cjs', 'x.sh', 'x.php', 'a.b.HTML'])(
+  it.each(['x.html', 'x.HTM', 'x.xhtml', 'x.shtml', 'x.svg', 'x.svgz', 'x.js', 'x.mjs', 'x.cjs', 'x.sh', 'x.php', 'x.xml', 'x.XSL', 'x.xslt', 'x.mht', 'x.mhtml', 'x.htc', 'a.b.HTML'])(
     'always refuses %s, with no config',
     (name) => expect(nameRefusal(name)).toMatch(/not accepted/),
   );

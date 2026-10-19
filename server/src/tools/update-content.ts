@@ -4,9 +4,8 @@ import type { Core } from '@strapi/strapi';
 import type { Modules } from '@strapi/types';
 import { actionForTool } from '../lib/tool-permissions';
 import { jsonCoercible } from '../lib/json-coercible';
-import { abilityFrom, readableContentTypes } from '../lib/read-permissions';
-import { createContentCheckers } from '../lib/content-checker';
-import { callerId } from './create-content';
+import { callerId } from '../lib/read-permissions';
+import { gateWrite, hasDraftAndPublish, loadDraftForPermission } from '../lib/content-checker';
 import { errorResult, okResult } from './results';
 
 /**
@@ -33,7 +32,7 @@ export const updateContent = ai.mcp.defineTool({
     'Update an existing document in any content type you are allowed to update. Requires ' +
     'contentType, documentId and data with ONLY the fields to change. Typical flow: search_content ' +
     'to find the documentId, then update_content. Pass status "published" to publish the change, ' +
-    'which needs Publish permission.',
+    'on types with draft and publish, which needs Publish permission.',
 
   auth: { policies: [{ action: actionForTool('update_content') }] },
 
@@ -49,42 +48,21 @@ export const updateContent = ai.mcp.defineTool({
   resolveOutputSchema: outputSchema,
 
   createHandler: (strapi: Core.Strapi, context) => async ({ args }): Promise<ToolResult> => {
-    const userAbility = abilityFrom(context);
-    if (!userAbility) {
-      return errorResult("update_content could not determine the caller's permissions, so it changed nothing.");
-    }
-    const checkerFor = createContentCheckers(strapi, userAbility);
-    const { displayed } = readableContentTypes(strapi, checkerFor);
-    const updatable = displayed.filter((uid) => !checkerFor(uid).cannot.update());
-    if (!updatable.includes(args.contentType)) {
-      return errorResult(
-        `You cannot update entries in "${args.contentType}". You can update: ${updatable.join(', ') || '(none)'}`,
-      );
-    }
-    const checker = checkerFor(args.contentType);
+    const gate = gateWrite(strapi, context, args.contentType, 'update');
+    if ('refusal' in gate) return errorResult(gate.refusal);
+    const { checker } = gate;
 
-    // Populate what the permission conditions read. Without this the draft
-    // arrives with no `createdBy`, so an "is creator" condition refuses the
-    // caller on their OWN documents. Strapi's built-in handler does the same.
-    const permissionQuery = await checker.sanitizedQuery.update({
-      ...(args.locale ? { locale: args.locale } : {}),
-    });
-    const populateBuilder = strapi.plugin('content-manager').service('populate-builder') as unknown as (uid: string) => {
-      populateFromQuery: (query: unknown) => { build: () => Promise<unknown> };
-    };
-    const populate = await populateBuilder(args.contentType).populateFromQuery(permissionQuery).build();
-
-    const existing = (await strapi.documents(args.contentType as never).findOne({
-      documentId: args.documentId,
-      status: 'draft',
-      populate,
-      ...(args.locale ? { locale: args.locale } : {}),
-    } as never)) as Record<string, unknown> | null;
+    // Loaded with what the permission conditions read, so an "is creator"
+    // condition does not refuse the caller on their own documents.
+    const existing = await loadDraftForPermission(strapi, checker, args.contentType, 'update', args.documentId, args.locale);
 
     if (!existing || checker.cannot.update(existing)) {
       return errorResult(`No document "${args.documentId}" in ${args.contentType} that you can update.`);
     }
-    if (args.status === 'published' && checker.cannot.publish(existing)) {
+    // Only a type with draft and publish has anything to publish. Elsewhere
+    // `status` is dropped from the write and the Publish grant is not asked.
+    const publishing = args.status === 'published' && hasDraftAndPublish(strapi, args.contentType);
+    if (publishing && checker.cannot.publish(existing)) {
       return errorResult(
         `You may update ${args.contentType} but not publish it. Retry without status "published".`,
       );
@@ -97,7 +75,7 @@ export const updateContent = ai.mcp.defineTool({
     const doc = (await strapi.documents(args.contentType as never).update({
       documentId: args.documentId,
       data,
-      ...(args.status ? { status: args.status } : {}),
+      ...(publishing ? { status: args.status } : {}),
       ...(args.locale ? { locale: args.locale } : {}),
       populate: '*',
     } as never)) as Record<string, unknown>;

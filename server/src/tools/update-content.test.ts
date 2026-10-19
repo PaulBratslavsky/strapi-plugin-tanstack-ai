@@ -58,4 +58,19 @@ describe('update_content', () => {
     expect(result).toMatchObject({ isError: true });
     expect(calls.some((call) => call.op === 'update')).toBe(false);
   });
+
+  it('on a type without draft and publish, accepts status "published" without Publish permission and drops status from the write', async () => {
+    const { strapi, calls } = fakeContentStrapi({ types: [ARTICLE], docs, noDraftAndPublish: [ARTICLE], deny: { publish: [ARTICLE] } });
+    const result = await runTool(updateContent, strapi, { contentType: ARTICLE, documentId: 'mine', data: { title: 'x' }, status: 'published' });
+    expect(result).not.toHaveProperty('isError');
+    const update = calls.find((call) => call.op === 'update');
+    expect(update).toBeDefined();
+    expect(update?.params).not.toHaveProperty('status');
+  });
+
+  it('passes status "published" to the write on a type with draft and publish when Publish is held', async () => {
+    const { strapi, calls } = fakeContentStrapi({ types: [ARTICLE], docs });
+    await runTool(updateContent, strapi, { contentType: ARTICLE, documentId: 'mine', data: { title: 'x' }, status: 'published' });
+    expect(calls.find((call) => call.op === 'update')?.params).toMatchObject({ status: 'published' });
+  });
 });
