@@ -24,12 +24,14 @@ export interface FakeContentOptions {
   creatorScoped?: string[];
   emailFails?: string;
   noEmailPlugin?: boolean;
+  /** The operator's `plugin::upload.security` config. */
+  uploadSecurity?: { allowedTypes?: string[]; deniedTypes?: string[] };
 }
 
 export function fakeContentStrapi(options: FakeContentOptions = {}) {
   const { types = [], docs = {}, deny = {}, hiddenFields = [], creatorScoped = [] } = options;
   const hidden = new Set(hiddenFields);
-  const calls: Array<{ op: string; uid?: string; params: unknown }> = [];
+  const calls: Array<{ op: string; uid?: string; params: unknown; opts?: unknown }> = [];
   const omitHidden = (record: Record<string, unknown>) =>
     Object.fromEntries(Object.entries(record).filter(([key]) => !hidden.has(key)));
   const denied = (action: keyof NonNullable<FakeContentOptions['deny']>, uid: string) =>
@@ -122,8 +124,8 @@ export function fakeContentStrapi(options: FakeContentOptions = {}) {
           }
           if (name === 'upload' && service === 'upload') {
             return {
-              upload: async (params: unknown) => {
-                calls.push({ op: 'upload', params });
+              upload: async (params: unknown, opts?: unknown) => {
+                calls.push({ op: 'upload', params, opts });
                 return [{ id: 42, name: 'cat.png', url: '/uploads/cat.png', mime: 'image/png', size: 3 }];
               },
             };
@@ -140,6 +142,7 @@ export function fakeContentStrapi(options: FakeContentOptions = {}) {
         },
       };
     },
+    config: { get: (key: string) => (key === 'plugin::upload.security' ? options.uploadSecurity : undefined) },
     log: { debug: vi.fn(), warn: vi.fn(), info: vi.fn(), error: vi.fn() },
   } as unknown as Core.Strapi;
 
