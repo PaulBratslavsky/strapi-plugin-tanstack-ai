@@ -5,6 +5,7 @@ import { createContent } from './create-content';
 import { findOneContent } from './find-one-content';
 import { listContentTypes } from './list-content-types';
 import { searchContent } from './search-content';
+import { updateContent } from './update-content';
 
 /**
  * The tool registry — ONE list, read by both `bootstrap` (which registers the
@@ -17,7 +18,7 @@ import { searchContent } from './search-content';
  * failure this plugin has already paid for once. Now there is nothing to keep
  * in step.
  */
-export const ALL_TOOLS = [listContentTypes, searchContent, aggregateContent, findOneContent, createContent];
+export const ALL_TOOLS = [listContentTypes, searchContent, aggregateContent, findOneContent, createContent, updateContent];
 
 /** A tool's own name, before any configured prefix. */
 export const toolNames = (): string[] => ALL_TOOLS.map((tool) => tool.name);
