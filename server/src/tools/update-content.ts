@@ -63,9 +63,21 @@ export const updateContent = ai.mcp.defineTool({
     }
     const checker = checkerFor(args.contentType);
 
+    // Populate what the permission conditions read. Without this the draft
+    // arrives with no `createdBy`, so an "is creator" condition refuses the
+    // caller on their OWN documents. Strapi's built-in handler does the same.
+    const permissionQuery = await checker.sanitizedQuery.update({
+      ...(args.locale ? { locale: args.locale } : {}),
+    });
+    const populateBuilder = strapi.plugin('content-manager').service('populate-builder') as unknown as (uid: string) => {
+      populateFromQuery: (query: unknown) => { build: () => Promise<unknown> };
+    };
+    const populate = await populateBuilder(args.contentType).populateFromQuery(permissionQuery).build();
+
     const existing = (await strapi.documents(args.contentType as never).findOne({
       documentId: args.documentId,
       status: 'draft',
+      populate,
       ...(args.locale ? { locale: args.locale } : {}),
     } as never)) as Record<string, unknown> | null;
 

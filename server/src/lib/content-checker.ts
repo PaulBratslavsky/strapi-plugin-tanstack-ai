@@ -24,6 +24,9 @@ export interface ContentChecker extends ReadChecker {
     update: (entity?: Entity) => boolean;
     publish: (entity?: Entity) => boolean;
   };
+  sanitizedQuery: ReadChecker['sanitizedQuery'] & {
+    update: (query: Entity) => Promise<Entity>;
+  };
   sanitizeCreateInput: (data: Entity) => Promise<Entity>;
   sanitizeUpdateInput: (entity: Entity) => (data: Entity) => Promise<Entity>;
 }

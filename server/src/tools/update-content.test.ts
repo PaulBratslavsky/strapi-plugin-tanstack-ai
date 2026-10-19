@@ -25,6 +25,17 @@ describe('update_content', () => {
     expect(structured(result)?.data).not.toHaveProperty('secret');
   });
 
+  it('loads the draft with the permission populate, so an "is creator" caller can update their own document', async () => {
+    // Strapi's is-creator condition reads createdBy; the draft must be loaded with it populated.
+    const mine = { [ARTICLE]: [{ documentId: 'mine', title: 'Old', createdBy: { id: 7 } }] };
+    const { strapi, calls } = fakeContentStrapi({ types: [ARTICLE], docs: mine, creatorScoped: [ARTICLE] });
+    const result = await runTool(updateContent, strapi, { contentType: ARTICLE, documentId: 'mine', data: { title: 'New' } });
+    expect(result).not.toHaveProperty('isError');
+    expect(calls.some((call) => call.op === 'update')).toBe(true);
+    const findOne = calls.find((call) => call.op === 'findOne');
+    expect(findOne?.params).toMatchObject({ documentId: 'mine', status: 'draft', populate: { createdBy: true } });
+  });
+
   it('answers an entry hidden by a condition exactly like a missing one, and writes nothing', async () => {
     // Review Focus 2.
     const { strapi, calls } = fakeContentStrapi({ types: [ARTICLE], docs });

@@ -20,12 +20,14 @@ export interface FakeContentOptions {
   docs?: Record<string, Array<Record<string, unknown>>>;
   deny?: Partial<Record<'read' | 'create' | 'update' | 'publish', string[]>>;
   hiddenFields?: string[];
+  /** Types whose update/publish permission is "is creator": refused when the entity carries no createdBy. */
+  creatorScoped?: string[];
   emailFails?: string;
   noEmailPlugin?: boolean;
 }
 
 export function fakeContentStrapi(options: FakeContentOptions = {}) {
-  const { types = [], docs = {}, deny = {}, hiddenFields = [] } = options;
+  const { types = [], docs = {}, deny = {}, hiddenFields = [], creatorScoped = [] } = options;
   const hidden = new Set(hiddenFields);
   const calls: Array<{ op: string; uid?: string; params: unknown }> = [];
   const omitHidden = (record: Record<string, unknown>) =>
@@ -35,16 +37,24 @@ export function fakeContentStrapi(options: FakeContentOptions = {}) {
   const sanitize = async (record: Record<string, unknown>) => omitHidden(record);
   const displayedTypes = () => types.map((uid) => ({ uid }));
 
+  // "is creator": the condition needs createdBy on the entity it is handed. A
+  // type-level check (no entity) passes, as in Strapi.
+  const lacksCreator = (uid: string, entity?: Record<string, unknown>) =>
+    creatorScoped.includes(uid) && entity !== undefined && !entity.createdBy;
+
   const checker = (uid: string) => ({
     cannot: {
       read: (entity?: Record<string, unknown>) => denied('read', uid) || Boolean(entity?.ownedByOther),
       create: () => denied('create', uid),
-      update: (entity?: Record<string, unknown>) => denied('update', uid) || Boolean(entity?.ownedByOther),
-      publish: (entity?: Record<string, unknown>) => denied('publish', uid) || Boolean(entity?.ownedByOther),
+      update: (entity?: Record<string, unknown>) =>
+        denied('update', uid) || Boolean(entity?.ownedByOther) || lacksCreator(uid, entity),
+      publish: (entity?: Record<string, unknown>) =>
+        denied('publish', uid) || Boolean(entity?.ownedByOther) || lacksCreator(uid, entity),
     },
     sanitizeQuery: async (query: Record<string, unknown>) => query,
     sanitizedQuery: {
       read: async (query: Record<string, unknown>) => ({ ...query, permissionCondition: true }),
+      update: async (query: Record<string, unknown>) => ({ ...query, permissionCondition: true }),
     },
     sanitizeOutput: sanitize,
     sanitizeCreateInput: sanitize,
@@ -52,6 +62,19 @@ export function fakeContentStrapi(options: FakeContentOptions = {}) {
   });
 
   const findById = (uid: string, id: unknown) => (docs[uid] ?? []).find((doc) => doc.documentId === id);
+
+  // content-manager's populate-builder: records the query, builds a populate
+  // that loads createdBy (what the permission conditions read).
+  const populateBuilderFor = (uid: string) => {
+    const builder = {
+      populateFromQuery: (query: unknown) => {
+        calls.push({ op: 'populateFromQuery', uid, params: query });
+        return builder;
+      },
+      build: async () => ({ createdBy: true }),
+    };
+    return builder;
+  };
 
   const strapi = {
     contentTypes: Object.fromEntries(types.map((uid) => [uid, { uid, attributes: {} }])),
@@ -66,7 +89,14 @@ export function fakeContentStrapi(options: FakeContentOptions = {}) {
       },
       findOne: async (params: Record<string, unknown>) => {
         calls.push({ op: 'findOne', uid, params });
-        return findById(uid, params.documentId) ?? null;
+        const doc = findById(uid, params.documentId);
+        if (!doc) return null;
+        // Like the real thing: createdBy only comes back when it was populated.
+        const populate = params.populate as Record<string, unknown> | undefined;
+        if (!populate?.createdBy) {
+          return Object.fromEntries(Object.entries(doc).filter(([key]) => key !== 'createdBy'));
+        }
+        return doc;
       },
       create: async (params: Record<string, unknown>) => {
         calls.push({ op: 'create', uid, params });
@@ -83,6 +113,9 @@ export function fakeContentStrapi(options: FakeContentOptions = {}) {
         service: (service: string) => {
           if (name === 'content-manager' && service === 'content-types') {
             return { findDisplayedContentTypes: displayedTypes };
+          }
+          if (name === 'content-manager' && service === 'populate-builder') {
+            return populateBuilderFor;
           }
           if (name === 'content-manager' && service === 'permission-checker') {
             return { create: ({ model }: { model: string }) => checker(model) };
