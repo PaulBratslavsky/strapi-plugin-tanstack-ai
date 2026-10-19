@@ -6,6 +6,11 @@ Every tool is gated behind its own admin permission action:
 plugin::tanstack-ai.tool.list-content-types
 plugin::tanstack-ai.tool.search-content
 plugin::tanstack-ai.tool.aggregate-content
+plugin::tanstack-ai.tool.find-one-content
+plugin::tanstack-ai.tool.create-content
+plugin::tanstack-ai.tool.update-content
+plugin::tanstack-ai.tool.upload-media
+plugin::tanstack-ai.tool.send-email
 ```
 
 **A tool that is not granted does not appear in `tools/list` at all, and
@@ -28,6 +33,48 @@ Grant them in either place:
 > action instead does not work, because those grants are always scoped to one
 > content type, so the subject-less check Strapi runs fails and the tool
 > silently never appears.
+
+---
+
+## What the content, upload and email tools also check
+
+The action lets a caller **use** the tool. The tools that change things check
+more, as the caller, before they act:
+
+| Action | Also needs |
+|---|---|
+| `find-one-content` | Content Manager **Read** on the type |
+| `create-content` | Content Manager **Create** on the type, and **Publish** when `status` is `"published"` |
+| `update-content` | Content Manager **Update** on the type, and **Publish** when `status` is `"published"` |
+| `upload-media` | `plugin::upload.assets.create`, the media library's own upload permission |
+| `send-email` | Nothing beyond the action |
+
+Some details that follow from running as the caller:
+
+- **Conditions apply.** `update_content` loads the draft with the permission
+  populate Strapi uses, so an "is creator" condition is evaluated against the
+  real row. A document that does not exist and one a condition hides get the
+  same "not found" answer, so a caller cannot probe for ids.
+- **Fields are filtered both ways.** Input is stripped of fields the caller may
+  not write, and the row comes back through the read filter, since a caller can
+  hold Create without Read. New and changed rows record the caller as creator
+  and updater, so "only mine" conditions work afterwards.
+- **`upload_media` fetches a URL on the server's behalf**, so it is
+  deliberately strict. It resolves the hostname and refuses private and
+  reserved addresses, and the check is made on the connection that is actually
+  used, so a name that changes its answer between lookup and connect is still
+  refused. Redirects are refused, so an allowed URL cannot bounce to a private
+  one. The body is streamed under a 50 MB cap, which holds for gzip and chunked
+  responses too. The operator's `plugin::upload.security` `allowedTypes` and
+  `deniedTypes` are applied to both the response's Content-Type and the file
+  name's extension, and a built-in deny-list (html, xhtml, svg, js, sh and php,
+  as types and as extensions) applies whatever the config says. The file is
+  written under a fixed temporary name, and the caller is recorded as its
+  creator.
+- **`send_email` has no Content Manager equivalent**, so its action alone is the
+  authorisation: whoever holds it can send mail from the host's address to any
+  recipient. Grant it deliberately. Failures, such as no email plugin or a
+  provider refusal, come back as errors rather than as a successful result.
 
 ---
 

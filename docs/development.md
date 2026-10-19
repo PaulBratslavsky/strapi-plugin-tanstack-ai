@@ -50,9 +50,9 @@ npm run start
 A pass looks like:
 
 ```
-[tanstack-ai] registered 3 permission action(s)
+[tanstack-ai] registered 8 permission action(s)
 [tanstack-ai] chat is on but not ready: Chat uses Anthropic but has no API key. …
-[tanstack-ai] registered 3/3 MCP tool(s)
+[tanstack-ai] registered 8/8 MCP tool(s)
 ```
 
 and `GET /tanstack-ai/config` returning `"ready": false` with that reason.
