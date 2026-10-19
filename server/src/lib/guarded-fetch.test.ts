@@ -30,10 +30,39 @@ async function withRawServer<T>(reply: string, run: (port: number) => Promise<T>
   }
 }
 
+/** A server that answers 200 and hands back the request head the client sent. */
+async function withRequestRecorder<T>(run: (port: number, received: () => string) => Promise<T>): Promise<T> {
+  let received = '';
+  const server = net.createServer((socket) => {
+    socket.on('error', ignore);
+    socket.once('data', (chunk) => {
+      received = chunk.toString('latin1');
+      socket.end(crlf('HTTP/1.1 200 OK', 'content-length: 0'));
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  try {
+    return await run((server.address() as AddressInfo).port, () => received);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+}
+
 const signal = () => AbortSignal.timeout(5000);
 const crlf = (...lines: string[]) => lines.join('\r\n') + '\r\n\r\n';
 
 describe('guardedFetch', () => {
+  it('identifies itself with a User-Agent, since some hosts refuse anonymous downloads', async () => {
+    await withRequestRecorder(async (port, received) => {
+      await fetchFixture(new URL(`http://fixture.test:${port}/image.png`), { signal: signal() });
+      const line = received()
+        .split('\r\n')
+        .find((header) => header.toLowerCase().startsWith('user-agent:'));
+      const userAgent = line?.slice('user-agent:'.length).trim() ?? '';
+      expect(userAgent).toMatch(/^strapi-plugin-tanstack-ai/);
+    });
+  });
+
   it('returns a streaming Response', async () => {
     const reply = crlf('HTTP/1.1 200 OK', 'content-type: image/png', 'content-length: 3') + 'abc';
     await withRawServer(reply, async (port) => {

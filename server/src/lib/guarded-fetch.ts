@@ -2,7 +2,14 @@ import http from 'node:http';
 import https from 'node:https';
 import { isIP } from 'node:net';
 import { Readable } from 'node:stream';
+import { version } from '../../../package.json';
 import { guardedLookup, isPrivateAddress } from './public-url';
+
+/**
+ * Some public hosts answer 403 to a request with no User-Agent, and global fetch
+ * would have sent one. Identifying the plugin keeps those downloads working.
+ */
+const USER_AGENT = `strapi-plugin-tanstack-ai/${version} (+https://github.com/PaulBratslavsky/strapi-plugin-tanstack-ai)`;
 
 /**
  * A GET that connects only to public addresses.
@@ -42,7 +49,7 @@ export const createGuardedFetch =
       const request = transport.request(
         url,
         // identity: node does not decompress, and an unrequested gzip body would be stored as-is.
-        { method: 'GET', lookup, signal, headers: { 'accept-encoding': 'identity' } },
+        { method: 'GET', lookup, signal, headers: { 'accept-encoding': 'identity', 'user-agent': USER_AGENT } },
         (incoming) => {
           // This runs from the socket's data handler: anything thrown here is an
           // uncaught exception that takes the whole server down, so it must reject instead.

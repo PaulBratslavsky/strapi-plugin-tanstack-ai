@@ -76,6 +76,9 @@ network behind the server:
 - The file is staged on disk under a fixed temporary name, so the name the
   model asks for is only a label. The caller is recorded as its creator.
 
+It identifies itself with a User-Agent header, because some hosts refuse
+anonymous downloads.
+
 `send_email` is gated only by its own action, since Content Manager has no
 permission for sending mail. Grant it deliberately. A failure now comes back as
 an error rather than as `success: false` data, so the chat reports it as a
